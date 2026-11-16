@@ -14,7 +14,11 @@ export function apply(state: State, command: Command, now: Now): Changes {
     case 'setEventTimes':
       return setEventTimes(state, command, now);
     case 'deleteEvent':
-      return deleteEvent(state, command);
+      return deleteEvent(state, command, now);
+    case 'placeTask':
+      return placeTask(state, command.id, command.eventId, now);
+    case 'unplaceTask':
+      return unplaceTask(state, command.id, now);
     case 'tickTask':
       return tickTask(state, command.id, now);
     case 'untickTask':
@@ -31,13 +35,15 @@ export function apply(state: State, command: Command, now: Now): Changes {
 function addTask(state: State, cmd: Extract<Command, { type: 'addTask' }>, now: Now): Changes {
   const title = cmd.title.trim();
   if (!title) return noChanges();
+  const event = cmd.eventId ? findEvent(state, cmd.eventId) : undefined;
+  if (cmd.eventId && !event) return noChanges();
   const position = Math.max(0, ...state.tasks.map((t) => t.position)) + 1;
   const row: TaskRow = {
     id: cmd.id,
     parent_id: null,
     title,
-    date: cmd.date,
-    event_id: null,
+    date: event ? event.date : cmd.date,
+    event_id: event ? event.id : null,
     completed_at: null,
     skipped_at: null,
     carried_over: false,
@@ -95,9 +101,19 @@ function setEventTimes(state: State, cmd: Extract<Command, { type: 'setEventTime
   return updateEvent(event.id, set, now);
 }
 
-function deleteEvent(state: State, cmd: Extract<Command, { type: 'deleteEvent' }>): Changes {
-  if (!findEvent(state, cmd.id)) return noChanges();
-  return { inserts: [], updates: [], deletes: [{ table: 'events', id: cmd.id }] };
+/** Deleting an Event deletes only the Event: its items are left Unplaced, on the day the Event was on. */
+function deleteEvent(state: State, cmd: Extract<Command, { type: 'deleteEvent' }>, now: Now): Changes {
+  const event = findEvent(state, cmd.id);
+  if (!event) return noChanges();
+  const updates = state.tasks
+    .filter((t) => t.event_id === event.id && !t.deleted_at)
+    .map((t) => ({
+      table: 'tasks' as const,
+      id: t.id,
+      // a Sub-task has no day of its own: it follows its parent
+      set: { event_id: null, ...(t.parent_id || t.date === event.date ? {} : { date: event.date }), updated_at: now },
+    }));
+  return { inserts: [], updates, deletes: [{ table: 'events', id: cmd.id }] };
 }
 
 function liveTask(state: State, id: string): TaskRow | undefined {
@@ -106,6 +122,33 @@ function liveTask(state: State, id: string): TaskRow | undefined {
 
 function updateTask(id: string, set: Record<string, unknown>): Changes {
   return { inserts: [], updates: [{ table: 'tasks', id, set }], deletes: [] };
+}
+
+/**
+ * Whether the Task or Sub-task can be placed into the Event: both exist, the Task has no Sub-tasks
+ * (only its Sub-tasks are placed) and it is not already there. A drag asks this before offering a drop.
+ */
+export function canPlace(state: State, id: string, eventId: string): boolean {
+  const task = liveTask(state, id);
+  if (!task || !findEvent(state, eventId) || task.event_id === eventId) return false;
+  return !state.tasks.some((t) => t.parent_id === id && !t.deleted_at);
+}
+
+/** A Task takes the Event's day; a Sub-task keeps its own and follows the Event through its Placement. */
+function placeTask(state: State, id: string, eventId: string, now: Now): Changes {
+  if (!canPlace(state, id, eventId)) return noChanges();
+  const task = liveTask(state, id)!;
+  const event = findEvent(state, eventId)!;
+  const set: Record<string, unknown> = { event_id: eventId };
+  if (!task.parent_id && task.date !== event.date) set.date = event.date;
+  return updateTask(id, { ...set, updated_at: now });
+}
+
+/** The Task stays on the day it has (the Event's day), so it is back in Anytime that day. */
+function unplaceTask(state: State, id: string, now: Now): Changes {
+  const task = liveTask(state, id);
+  if (!task?.event_id) return noChanges();
+  return updateTask(id, { event_id: null, updated_at: now });
 }
 
 /** Ticking records the Completion time. A Task that is already done keeps the time it has. */

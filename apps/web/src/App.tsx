@@ -1,9 +1,11 @@
-import { dayView, today, type Command, type DayView, type ItemView, type StripDay } from '@dayplanner/core';
+import { canPlace, dayView, today, type Command, type DayView, type ItemView, type StripDay } from '@dayplanner/core';
 import { useStatus } from '@powersync/react';
 import type { AbstractPowerSyncDatabase } from '@powersync/web';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { Clock } from './clock.ts';
-import { DayTabs, EventMenu, NowAndNext } from './Events.tsx';
+import { DragProvider, type DragSource } from './drag.tsx';
+import { DayTabs, EventMenu, NowAndNext, type EventActions } from './Events.tsx';
+import { AddField, Pill, label, type ItemActions } from './Items.tsx';
 import { runCommand, useStoreState } from './store/adapter.ts';
 
 /** Local calendar math for labels only: dates are plain strings, so go through UTC to avoid timezone shifts. */
@@ -21,50 +23,90 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
   const [eventMenuId, setEventMenuId] = useState<string | null>(null);
   const menuEvent = state?.events.find((e) => e.id === eventMenuId) ?? null;
   const [menuId, setMenuId] = useState<string | null>(null);
-  const menuItem = view && menuId ? [...view.anytime.items, ...view.done.items].find((i) => i.id === menuId) : undefined;
+  const menuItem = view && menuId ? everyItem(view).find((i) => i.id === menuId) : undefined;
   const run = (command: Command) => runCommand(db, command, clock.now());
   const tick = (item: ItemView) => run({ type: item.completedTime ? 'untickTask' : 'tickTask', id: item.id });
 
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2800);
+    return () => clearTimeout(t);
+  }, [toast]);
+  const eventTitle = (id: string) => state?.events.find((e) => e.id === id)?.title ?? '';
+  const actions: EventActions = {
+    onTick: tick,
+    onOpen: setMenuId,
+    open: setEventMenuId,
+    onAddTask: async (eventId, title) => {
+      await run({ type: 'addTask', id: crypto.randomUUID(), title, date, eventId });
+      setToast(`Added “${title}” in ${eventTitle(eventId)}`);
+    },
+  };
+
   return (
-    <main className="main">
-      <header className="top">
-        <h1>{fmt(date, { weekday: 'long', day: 'numeric', month: 'long' })}</h1>
-        <SyncBadge />
-      </header>
-      {view && (
-        <>
-          <Strip days={view.strip} selected={view.date} />
-          <NowAndNext view={view} open={setEventMenuId} />
-          <Anytime
-            view={view}
-            onAdd={(title) => run({ type: 'addTask', id: crypto.randomUUID(), title, date })}
-            onTick={tick}
-            onOpen={setMenuId}
+    <DragProvider
+      canDrop={(source, eventId) => !!state && canPlace(state, source.id, eventId)}
+      onDrop={async (source: DragSource, eventId) => {
+        await run({ type: 'placeTask', id: source.id, eventId });
+        setToast(`Placed “${source.label}” in ${eventTitle(eventId)}`);
+      }}
+    >
+      <main className="main">
+        <header className="top">
+          <h1>{fmt(date, { weekday: 'long', day: 'numeric', month: 'long' })}</h1>
+          <SyncBadge />
+        </header>
+        {view && (
+          <>
+            <Strip days={view.strip} selected={view.date} />
+            <NowAndNext view={view} actions={actions} />
+            <Anytime
+              view={view}
+              onAdd={(title) => run({ type: 'addTask', id: crypto.randomUUID(), title, date })}
+              onTick={tick}
+              onOpen={setMenuId}
+            />
+            <DoneToday view={view} onTick={tick} onOpen={setMenuId} />
+            {menuItem && <TaskMenu item={menuItem} onClose={() => setMenuId(null)} run={run} />}
+            <DayTabs
+              view={view}
+              actions={actions}
+              onAdd={(title, start, end) => run({ type: 'addEvent', id: crypto.randomUUID(), title, date, start, end })}
+            />
+          </>
+        )}
+        {menuEvent && (
+          <EventMenu
+            key={menuEvent.id}
+            event={menuEvent}
+            onClose={() => setEventMenuId(null)}
+            onSave={async (title, start, end) => {
+              await run({ type: 'renameEvent', id: menuEvent.id, title });
+              await run({ type: 'setEventTimes', id: menuEvent.id, start, end });
+            }}
+            onDelete={() => run({ type: 'deleteEvent', id: menuEvent.id })}
           />
-          <DoneToday view={view} onTick={tick} onOpen={setMenuId} />
-          {menuItem && <TaskMenu item={menuItem} onClose={() => setMenuId(null)} run={run} />}
-          <DayTabs
-            view={view}
-            open={setEventMenuId}
-            onAdd={(title, start, end) => run({ type: 'addEvent', id: crypto.randomUUID(), title, date, start, end })}
-          />
-        </>
-      )}
-      {menuEvent && (
-        <EventMenu
-          key={menuEvent.id}
-          event={menuEvent}
-          onClose={() => setEventMenuId(null)}
-          onSave={async (title, start, end) => {
-            await run({ type: 'renameEvent', id: menuEvent.id, title });
-            await run({ type: 'setEventTimes', id: menuEvent.id, start, end });
-          }}
-          onDelete={() => run({ type: 'deleteEvent', id: menuEvent.id })}
-        />
-      )}
-    </main>
+        )}
+        {toast && (
+          <div className="toast" role="status">
+            {toast}
+          </div>
+        )}
+      </main>
+    </DragProvider>
   );
 }
+
+/** Everything on screen the tap menu can be opened for. */
+const everyItem = (view: DayView): ItemView[] => [
+  ...view.anytime.items,
+  ...view.done.items,
+  ...view.now.cards.flatMap((c) => c.tasks),
+  ...(view.next?.events.flatMap((e) => e.tasks) ?? []),
+  ...view.later.events.flatMap((e) => e.tasks),
+  ...view.earlier.events.flatMap((e) => e.tasks),
+];
 
 function SyncBadge() {
   const s = useStatus();
@@ -96,34 +138,6 @@ function Strip({ days, selected }: { days: StripDay[]; selected: string }) {
 const ANYTIME_SHOWN = 6;
 const DONE_SHOWN = 4;
 
-interface ItemActions {
-  onTick: (item: ItemView) => void;
-  onOpen: (id: string) => void;
-}
-
-/** One pill: the round tick toggles done, the label opens the tap menu. */
-function Pill({ item, onTick, onOpen }: { item: ItemView } & ItemActions) {
-  const isDone = item.completedTime !== null;
-  return (
-    <li className={`pill ${item.carriedOver ? 'carried' : ''} ${isDone ? 'done' : ''}`}>
-      <button
-        type="button"
-        className={`tick ${isDone ? 'on' : ''}`}
-        aria-label={`${isDone ? 'Untick' : 'Tick off'} ${label(item)}`}
-        onClick={() => onTick(item)}
-      >
-        {isDone && '✓'}
-      </button>
-      <button type="button" className="label" aria-haspopup="dialog" onClick={() => onOpen(item.id)}>
-        {label(item)}
-      </button>
-      {item.carriedOver && <span className="badge warn">↪</span>}
-      {item.recurring && <span className="badge">↻</span>}
-      {item.completedTime && <small className="mute">{item.completedTime}</small>}
-    </li>
-  );
-}
-
 /** Pills that collapse to `limit` with a "+N more" / "Show less" button. */
 function Collapsible({ items, limit, ...actions }: { items: ItemView[]; limit: number } & ItemActions) {
   const [all, setAll] = useState(false);
@@ -154,24 +168,6 @@ function Anytime({ view, onAdd, ...actions }: { view: DayView; onAdd: (title: st
       <Collapsible items={view.anytime.items} limit={ANYTIME_SHOWN} {...actions} />
       <AddField placeholder="+ Task today" onAdd={onAdd} />
     </section>
-  );
-}
-
-const label = (i: ItemView) => (i.parentTitle ? `${i.parentTitle} › ${i.title}` : i.title);
-
-function AddField({ placeholder, onAdd }: { placeholder: string; onAdd: (title: string) => Promise<unknown> }) {
-  const [text, setText] = useState('');
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    const title = text.trim();
-    if (!title) return;
-    setText(''); // keeps focus for the next one
-    await onAdd(title);
-  };
-  return (
-    <form onSubmit={submit}>
-      <input className="add" value={text} onChange={(e) => setText(e.target.value)} placeholder={placeholder} aria-label={placeholder} />
-    </form>
   );
 }
 
@@ -208,6 +204,10 @@ function TaskMenu({ item, onClose, run }: { item: ItemView; onClose: () => void;
     await run({ type: 'deleteTask', id: item.id });
     onClose();
   };
+  const takeOut = async () => {
+    await run({ type: 'unplaceTask', id: item.id });
+    onClose();
+  };
   return (
     <div className="backdrop" onClick={onClose}>
       <form className="sheet" role="dialog" aria-label="Edit task" onClick={(e) => e.stopPropagation()} onSubmit={save}>
@@ -222,9 +222,15 @@ function TaskMenu({ item, onClose, run }: { item: ItemView; onClose: () => void;
             <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
           </label>
         )}
+        {item.placement && <p className="mute">In {item.placement.title}</p>}
         <div className="actions">
           <button type="submit" className="primary">Save</button>
           <button type="button" onClick={onClose}>Cancel</button>
+          {item.placement && (
+            <button type="button" onClick={takeOut}>
+              Take out of {item.placement.title}
+            </button>
+          )}
           <button type="button" className="danger" onClick={remove}>Delete</button>
         </div>
       </form>

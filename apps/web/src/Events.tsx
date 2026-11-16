@@ -6,12 +6,25 @@ import {
   type EventCard,
   type NowCard,
 } from '@dayplanner/core';
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
+import { eventDrop } from './drag.tsx';
+import { AddField, TaskRows, type ItemActions } from './Items.tsx';
 import './events.css';
 
 /** The Events part of Today: Now, Next, and the Later today / Earlier today tabs. No rules in here. */
 
 export type Open = (eventId: string) => void;
+
+/** What the Event cards need from the screen: the tap menus, ticking, and adding a Task straight into an Event. */
+export interface EventActions extends ItemActions {
+  open: Open;
+  onAddTask: (eventId: string, title: string) => Promise<unknown>;
+}
+
+/** The "+ …" field inside an Event card. */
+function AddInEvent({ card, actions }: { card: { id: string; title: string }; actions: EventActions }) {
+  return <AddField placeholder={`+ Task in ${card.title}`} onAdd={(title) => actions.onAddTask(card.id, title)} />;
+}
 
 const range = (e: { start: string; end: string }) => `${e.start}–${e.end}`;
 
@@ -23,7 +36,8 @@ function EventButton({ card, open, className }: { card: { id: string; title: str
   );
 }
 
-export function NowAndNext({ view, open }: { view: DayView; open: Open }) {
+export function NowAndNext({ view, actions }: { view: DayView; actions: EventActions }) {
+  const { open } = actions;
   const { cards } = view.now;
   const [lead, ...others] = cards;
   return (
@@ -38,9 +52,9 @@ export function NowAndNext({ view, open }: { view: DayView; open: Open }) {
           </div>
         ) : (
           <div className="now-grid">
-            <NowCardView card={lead} open={open} lead={cards.length === 1 ? 'only' : 'lead'} />
+            <NowCardView card={lead} actions={actions} lead={cards.length === 1 ? 'only' : 'lead'} />
             {others.map((c) => (
-              <NowCardView key={c.id} card={c} open={open} lead="also" />
+              <NowCardView key={c.id} card={c} actions={actions} lead="also" />
             ))}
           </div>
         )}
@@ -51,9 +65,11 @@ export function NowAndNext({ view, open }: { view: DayView; open: Open }) {
             Next · {view.next.start} (in {formatDuration(view.next.startsInMinutes)})
           </div>
           {view.next.events.map((e) => (
-            <div key={e.id} className="next-ev">
+            <div key={e.id} className="next-ev" {...eventDrop(e.id)}>
               <EventButton card={e} open={open} className="h3" />
               <span className="mute"> {range(e)}</span>
+              <TaskRows items={e.tasks} {...actions} />
+              <AddInEvent card={e} actions={actions} />
             </div>
           ))}
         </section>
@@ -62,10 +78,11 @@ export function NowAndNext({ view, open }: { view: DayView; open: Open }) {
   );
 }
 
-function NowCardView({ card, open, lead }: { card: NowCard; open: Open; lead: 'only' | 'lead' | 'also' }) {
+function NowCardView({ card, actions, lead }: { card: NowCard; actions: EventActions; lead: 'only' | 'lead' | 'also' }) {
+  const { open } = actions;
   const percent = Math.round(card.progress * 100);
   return (
-    <div className={`now-card ${lead === 'also' ? 'also' : ''}`} data-testid="now-card">
+    <div className={`now-card ${lead === 'also' ? 'also' : ''}`} data-testid="now-card" {...eventDrop(card.id)}>
       <div className="ev-label">
         {lead === 'also' ? 'Also now' : 'Now'} · {range(card)} · {card.minutesLeft} min left
       </div>
@@ -73,6 +90,9 @@ function NowCardView({ card, open, lead }: { card: NowCard; open: Open; lead: 'o
       <div className="bar" role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
         <div style={{ width: `${percent}%` }} />
       </div>
+      {card.tasks.length === 0 && <p className="nothing">Nothing placed</p>}
+      <TaskRows items={card.tasks} {...actions} />
+      <AddInEvent card={card} actions={actions} />
     </div>
   );
 }
@@ -81,13 +101,14 @@ type Tab = 'later' | 'earlier';
 
 export function DayTabs({
   view,
-  open,
+  actions,
   onAdd,
 }: {
   view: DayView;
-  open: Open;
+  actions: EventActions;
   onAdd: (title: string, start: string, end: string) => Promise<unknown>;
 }) {
+  const { open } = actions;
   const [tab, setTab] = useState<Tab>('later');
   const tabs: [Tab, string, number][] = [
     ['later', 'Later today', view.later.count],
@@ -106,7 +127,13 @@ export function DayTabs({
         {tab === 'later' ? (
           <>
             {view.later.events.map((e) => (
-              <Row key={e.id} card={e} open={open} sub={range(e)} right={e.startsInMinutes === null ? null : `in ${formatDuration(e.startsInMinutes)}`} />
+              <Row
+                key={e.id}
+                card={e}
+                actions={actions}
+                sub={range(e)}
+                right={e.startsInMinutes === null ? null : <span className="rel">in {formatDuration(e.startsInMinutes)}</span>}
+              />
             ))}
             {view.later.count === 0 && <p className="mute">Nothing else later today.</p>}
             <AddEvent onAdd={onAdd} />
@@ -117,10 +144,10 @@ export function DayTabs({
               <Row
                 key={e.id}
                 card={e}
-                open={open}
+                actions={actions}
                 past
-                sub={`${range(e)} · ${formatDuration(e.durationMinutes)}`}
-                right={e.endedMinutesAgo === null ? null : `ended ${formatDuration(e.endedMinutesAgo)} ago`}
+                sub={[range(e), formatDuration(e.durationMinutes), ...e.doneHere.map((t) => t.title)].join(' · ')}
+                right={<Outcome card={e} />}
               />
             ))}
             {view.earlier.count === 0 && <p className="mute">Nothing has finished yet.</p>}
@@ -131,14 +158,41 @@ export function DayTabs({
   );
 }
 
-function Row({ card, open, sub, right, past }: { card: EventCard; open: Open; sub: string; right: string | null; past?: boolean }) {
+/** How a finished Event went: "1/3 done" in orange with "slot missed", "3/3 done" in green, or how long ago it ended. */
+function Outcome({ card }: { card: EventCard }) {
+  if (card.placedTotal === 0) {
+    return card.endedMinutesAgo === null ? null : <span className="rel">ended {formatDuration(card.endedMinutesAgo)} ago</span>;
+  }
   return (
-    <div className={`ev-row ${past ? 'past' : ''}`}>
-      <div>
-        <EventButton card={card} open={open} />
-        <div className="mute">{sub}</div>
+    <span className={`rel ${card.slotMissed ? 'missed' : 'all-done'}`}>
+      {card.placedDone}/{card.placedTotal} done{card.slotMissed && ' · slot missed'}
+    </span>
+  );
+}
+
+function Row({
+  card,
+  actions,
+  sub,
+  right,
+  past,
+}: {
+  card: EventCard;
+  actions: EventActions;
+  sub: string;
+  right: ReactNode;
+  past?: boolean;
+}) {
+  return (
+    <div className={`ev-row ${past ? 'past' : ''}`} {...eventDrop(card.id)}>
+      <div className="ev-head">
+        <div>
+          <EventButton card={card} open={actions.open} />
+          <div className="mute">{sub}</div>
+        </div>
+        {right}
       </div>
-      {right && <span className="rel">{right}</span>}
+      <TaskRows items={card.tasks} {...actions} />
     </div>
   );
 }

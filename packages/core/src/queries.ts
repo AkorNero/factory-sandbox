@@ -9,6 +9,10 @@ export interface ItemView {
   recurring: boolean;
   /** 'HH:MM' of the Completion time, for done items. */
   completedTime: string | null;
+  /** The Event it is placed in; null when Unplaced. */
+  placement: { eventId: string; title: string } | null;
+  /** The title of the Event it was done in (worked out from the Completion time); null when done outside every Event. */
+  doneIn: string | null;
 }
 
 export interface StripDay {
@@ -30,6 +34,15 @@ export interface EventCard {
   startsInMinutes: number | null;
   /** Minutes since it ended; null on any day but today. */
   endedMinutesAgo: number | null;
+  /** The Tasks and Sub-tasks placed in it, done ones included. */
+  tasks: ItemView[];
+  /** How many of the placed items are done, out of how many are placed ("1/3 done"). */
+  placedDone: number;
+  placedTotal: number;
+  /** The slot ended with unfinished placed items. They stay in the Event; nothing moves yet. */
+  slotMissed: boolean;
+  /** The items done in this Event (from their Completion time), whether or not they were placed in it. */
+  doneHere: ItemView[];
 }
 
 /** A live Event on the Now card. */
@@ -41,6 +54,9 @@ export interface NowCard {
   minutesLeft: number;
   /** 0 to 1 */
   progress: number;
+  tasks: ItemView[];
+  placedDone: number;
+  placedTotal: number;
 }
 
 export interface DayView {
@@ -60,8 +76,14 @@ export interface DayView {
 
 const STRIP_DAYS = 8; // today and the next 7
 
+const placedCounts = (tasks: ItemView[]) => ({
+  tasks,
+  placedDone: tasks.filter((t) => t.completedTime).length,
+  placedTotal: tasks.length,
+});
+
 /** Where the day's Events stand against the clock. */
-function eventSections(events: EventRow[], date: DateStr, now: Now) {
+function eventSections(events: EventRow[], date: DateStr, now: Now, placed: (eventId: string) => ItemView[], doneIn: (eventId: string) => ItemView[]) {
   const day = events.filter((e) => !e.deleted_at && e.date === date);
   const isToday = date === dateOf(now);
   const nowMin = minutesOf(timeOf(now));
@@ -78,6 +100,9 @@ function eventSections(events: EventRow[], date: DateStr, now: Now) {
     durationMinutes: minutesOf(e.end_time) - minutesOf(e.start_time),
     startsInMinutes: isToday ? minutesOf(e.start_time) - nowMin : null,
     endedMinutesAgo: isToday ? nowMin - minutesOf(e.end_time) : null,
+    ...placedCounts(placed(e.id)),
+    slotMissed: phase(e) === 'earlier' && placed(e.id).some((t) => !t.completedTime),
+    doneHere: doneIn(e.id),
   });
   const byStart = (a: EventRow, b: EventRow) =>
     a.start_time.localeCompare(b.start_time) || a.end_time.localeCompare(b.end_time) || a.id.localeCompare(b.id);
@@ -95,7 +120,7 @@ function eventSections(events: EventRow[], date: DateStr, now: Now) {
       cards: live.map((e): NowCard => {
         const left = minutesOf(e.end_time) - nowMin;
         const length = minutesOf(e.end_time) - minutesOf(e.start_time);
-        return { id: e.id, title: e.title, start: e.start_time, end: e.end_time, minutesLeft: left, progress: 1 - left / length };
+        return { id: e.id, title: e.title, start: e.start_time, end: e.end_time, minutesLeft: left, progress: 1 - left / length, ...placedCounts(placed(e.id)) };
       }),
     },
     next: nextStart ? { start: nextStart, startsInMinutes: minutesOf(nextStart) - nowMin, events: next.map(card) } : null,
@@ -104,10 +129,32 @@ function eventSections(events: EventRow[], date: DateStr, now: Now) {
   };
 }
 
+const covers = (e: EventRow, time: string) => e.start_time <= time && time < e.end_time;
+
+/**
+ * The Event a done item was done in, worked out from its Completion time: the Event it is placed in if that
+ * covers the time, else the most recently started Event covering it, else none.
+ */
+function doneInEvent(task: TaskRow, events: Map<string, EventRow>): EventRow | undefined {
+  const date = dateOf(task.completed_at!);
+  const time = timeOf(task.completed_at!);
+  const placed = task.event_id ? events.get(task.event_id) : undefined;
+  if (placed && placed.date === date && covers(placed, time)) return placed;
+  return [...events.values()]
+    .filter((e) => e.date === date && covers(e, time))
+    .sort((a, b) => b.start_time.localeCompare(a.start_time) || b.end_time.localeCompare(a.end_time) || b.id.localeCompare(a.id))[0];
+}
+
 /** Everything the screen shows for one day. State, a date and "now" in; a view out. Nothing here is stored. */
 export function dayView(state: State, date: DateStr, now: Now): DayView {
   const live = state.tasks.filter((t) => !t.deleted_at);
   const byId = new Map(live.map((t) => [t.id, t]));
+  const events = new Map(state.events.filter((e) => !e.deleted_at).map((e) => [e.id, e]));
+  /** The Event a Task is placed in; a Placement that points at a missing Event counts as Unplaced. */
+  const placedIn = (t: TaskRow) => (t.event_id ? events.get(t.event_id) : undefined);
+  /** An item's effective day: its Event's date if placed, else its own date (Task) or its parent's day (Sub-task). */
+  const effectiveDay = (t: TaskRow): DateStr | null =>
+    placedIn(t)?.date ?? (t.parent_id ? (byId.get(t.parent_id)?.date ?? null) : t.date);
 
   const toItem = (t: TaskRow): ItemView => ({
     id: t.id,
@@ -116,17 +163,31 @@ export function dayView(state: State, date: DateStr, now: Now): DayView {
     carriedOver: t.carried_over,
     recurring: t.series_id !== null,
     completedTime: t.completed_at ? timeOf(t.completed_at) : null,
+    placement: placedIn(t) ? { eventId: t.event_id!, title: placedIn(t)!.title } : null,
+    doneIn: t.completed_at ? (doneInEvent(t, events)?.title ?? null) : null,
   });
+  const placed = (eventId: string) =>
+    live
+      .filter((t) => t.event_id === eventId && !t.skipped_at)
+      .sort((a, b) => a.position - b.position)
+      .map(toItem);
 
-  const dayTasks = live.filter((t) => t.date === date);
+  const doneInEventId = (t: TaskRow) => (t.completed_at ? doneInEvent(t, events)?.id : undefined);
+  const doneHere = (eventId: string) =>
+    live
+      .filter((t) => doneInEventId(t) === eventId)
+      .sort((a, b) => (a.completed_at! < b.completed_at! ? 1 : -1))
+      .map(toItem);
+
+  const dayTasks = live.filter((t) => effectiveDay(t) === date);
   const open = dayTasks.filter((t) => !t.completed_at && !t.skipped_at);
   const anytime = open
-    .filter((t) => !t.event_id)
+    .filter((t) => !placedIn(t))
     .sort((a, b) => Number(b.carried_over) - Number(a.carried_over) || a.position - b.position);
   const done = dayTasks
     .filter((t) => t.completed_at)
     .sort((a, b) => (a.completed_at! < b.completed_at! ? 1 : -1));
-  const someday = live.filter((t) => t.date === null && !t.completed_at).sort((a, b) => a.position - b.position);
+  const someday = live.filter((t) => t.parent_id === null && t.date === null && !t.completed_at).sort((a, b) => a.position - b.position);
 
   const start = today(now);
   const strip: StripDay[] = Array.from({ length: STRIP_DAYS }, (_, i) => {
@@ -134,14 +195,14 @@ export function dayView(state: State, date: DateStr, now: Now): DayView {
     return {
       date: d,
       events: state.events.filter((e) => !e.deleted_at && e.date === d).length,
-      tasks: live.filter((t) => t.date === d && !t.completed_at && !t.skipped_at).length,
+      tasks: live.filter((t) => effectiveDay(t) === d && !t.completed_at && !t.skipped_at).length,
     };
   });
 
   return {
     date,
     isToday: date === dateOf(now),
-    ...eventSections(state.events, date, now),
+    ...eventSections(state.events, date, now, placed, doneHere),
     anytime: { count: anytime.length, items: anytime.map(toItem) },
     done: { count: done.length, total: dayTasks.length, items: done.map(toItem) },
     someday: { count: someday.length, items: someday.map(toItem) },

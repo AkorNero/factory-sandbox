@@ -114,11 +114,17 @@ export type Command =
       title: string;
       /** null adds a Someday Task. */
       date: DateStr | null;
+      /** Adds the Task already placed in this Event; it then takes the Event's day. */
+      eventId?: string;
     }
   | { type: 'addEvent'; id: string; title: string; date: DateStr; start: TimeStr; end: TimeStr }
   | { type: 'renameEvent'; id: string; title: string }
   | { type: 'setEventTimes'; id: string; start: TimeStr; end: TimeStr }
   | { type: 'deleteEvent'; id: string }
+  /** Place a Task or Sub-task into an Event (a Task takes the Event's day). */
+  | { type: 'placeTask'; id: string; eventId: string }
+  /** Take it out of its Event, keeping its day. */
+  | { type: 'unplaceTask'; id: string }
   | { type: 'tickTask'; id: string }
   | { type: 'untickTask'; id: string }
   /** Edit a done Task's Completion time to `time` ('HH:MM') on the day it already has. */
