@@ -19,6 +19,8 @@ export function apply(state: State, command: Command, now: Now): Changes {
       return placeTask(state, command.id, command.eventId, now);
     case 'unplaceTask':
       return unplaceTask(state, command.id, now);
+    case 'undateTask':
+      return undateTask(state, command.id, now);
     case 'tickTask':
       return tickTask(state, command.id, now);
     case 'untickTask':
@@ -149,6 +151,23 @@ function unplaceTask(state: State, id: string, now: Now): Changes {
   const task = liveTask(state, id);
   if (!task?.event_id) return noChanges();
   return updateTask(id, { event_id: null, updated_at: now });
+}
+
+/**
+ * Whether the Task can be sent to Someday: it is a live Task with a date that is still open and not recurring.
+ * A Sub-task follows its parent and cannot go on its own, and a recurring Task is always dated.
+ * A drag asks this before offering the Someday tab as a drop.
+ */
+export function canUndate(state: State, id: string): boolean {
+  const task = liveTask(state, id);
+  return !!task && !task.parent_id && task.date !== null && !task.completed_at && !task.series_id;
+}
+
+/** The Task is left with no date and no Placement. */
+function undateTask(state: State, id: string, now: Now): Changes {
+  if (!canUndate(state, id)) return noChanges();
+  const task = liveTask(state, id)!;
+  return updateTask(id, { date: null, ...(task.event_id ? { event_id: null } : {}), updated_at: now });
 }
 
 /** Ticking records the Completion time. A Task that is already done keeps the time it has. */

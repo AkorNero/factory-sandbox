@@ -1,5 +1,5 @@
 export * from './types.ts';
-export { apply, applyChanges, canPlace } from './commands.ts';
+export { apply, applyChanges, canPlace, canUndate } from './commands.ts';
 export { dayView } from './queries.ts';
 export type { DayView, EventCard, ItemView, NowCard, StripDay } from './queries.ts';
 export { addDays, dateOf, formatDuration, minutesOf, timeOf, today } from './dates.ts';
