@@ -1,0 +1,49 @@
+import { describe, expect, it } from 'vitest';
+import { apply, applyChanges, dayView } from '../src/index.ts';
+import { MON_10_15, TODAY, aState, aTask } from './helpers.ts';
+
+describe('ticking a Task off', () => {
+  it('records the Completion time, moves it out of Anytime today into Done today, and counts it', () => {
+    const state = aState({
+      tasks: [aTask({ id: 'a', title: 'Buy stamps', position: 1 }), aTask({ id: 'b', title: 'Call Ann', position: 2 })],
+    });
+
+    const after = applyChanges(state, apply(state, { type: 'tickTask', id: 'a' }, MON_10_15));
+
+    const view = dayView(after, TODAY, MON_10_15);
+    expect(view.anytime.items.map((i) => i.title)).toEqual(['Call Ann']);
+    expect(view.done.items.map((i) => i.title)).toEqual(['Buy stamps']);
+    expect(view.done.items[0]?.completedTime).toBe('10:15');
+    expect([view.done.count, view.done.total]).toEqual([1, 2]);
+  });
+
+  it('changes only the Completion time and updated-at columns', () => {
+    const state = aState({ tasks: [aTask({ id: 'a' })] });
+
+    const changes = apply(state, { type: 'tickTask', id: 'a' }, MON_10_15);
+
+    expect(changes.inserts).toEqual([]);
+    expect(changes.deletes).toEqual([]);
+    expect(changes.updates).toEqual([
+      { table: 'tasks', id: 'a', set: { completed_at: MON_10_15, updated_at: MON_10_15 } },
+    ]);
+  });
+
+  it('lists the newest tick first among the done items', () => {
+    let state = aState({ tasks: [aTask({ id: 'a', title: 'First' }), aTask({ id: 'b', title: 'Second' })] });
+    state = applyChanges(state, apply(state, { type: 'tickTask', id: 'a' }, '2026-11-16T09:40:00+01:00'));
+    state = applyChanges(state, apply(state, { type: 'tickTask', id: 'b' }, MON_10_15));
+
+    expect(dayView(state, TODAY, MON_10_15).done.items.map((i) => i.title)).toEqual(['Second', 'First']);
+  });
+
+  it('keeps the first Completion time when an already done Task is ticked again', () => {
+    const state = aState({ tasks: [aTask({ id: 'a', completed_at: '2026-11-16T08:00:00+01:00' })] });
+
+    expect(apply(state, { type: 'tickTask', id: 'a' }, MON_10_15)).toEqual({ inserts: [], updates: [], deletes: [] });
+  });
+
+  it('ignores a Task that does not exist', () => {
+    expect(apply(aState(), { type: 'tickTask', id: 'nope' }, MON_10_15).updates).toEqual([]);
+  });
+});

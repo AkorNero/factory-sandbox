@@ -6,6 +6,8 @@ export function apply(state: State, command: Command, now: Now): Changes {
   switch (command.type) {
     case 'addTask':
       return addTask(state, command, now);
+    case 'tickTask':
+      return tickTask(state, command.id, now);
   }
 }
 
@@ -31,6 +33,21 @@ function addTask(state: State, cmd: Extract<Command, { type: 'addTask' }>, now: 
     updated_at: now,
   };
   return { inserts: [{ table: 'tasks', row }], updates: [], deletes: [] };
+}
+
+function liveTask(state: State, id: string): TaskRow | undefined {
+  return state.tasks.find((t) => t.id === id && !t.deleted_at);
+}
+
+function updateTask(id: string, set: Record<string, unknown>): Changes {
+  return { inserts: [], updates: [{ table: 'tasks', id, set }], deletes: [] };
+}
+
+/** Ticking records the Completion time. A Task that is already done keeps the time it has. */
+function tickTask(state: State, id: string, now: Now): Changes {
+  const task = liveTask(state, id);
+  if (!task || task.completed_at) return noChanges();
+  return updateTask(id, { completed_at: now, updated_at: now });
 }
 
 /** Apply changed rows to a state snapshot (used by tests, and by anything that wants the result in memory). */
