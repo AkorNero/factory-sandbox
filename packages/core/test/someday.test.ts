@@ -67,3 +67,94 @@ describe('sending a Task to Someday (undate)', () => {
     }
   });
 });
+
+describe('"Do today" on a Someday Task (date)', () => {
+  const base = () =>
+    aState({
+      tasks: [
+        aTask({ id: 'idea', title: 'Learn Welsh', date: null, position: 1 }),
+        aTask({ id: 'open', title: 'Buy stamps', position: 2 }),
+      ],
+    });
+
+  it('dates it to today and shows it in Anytime today, out of Someday', () => {
+    const view = dayView(run(base(), { type: 'dateTask', id: 'idea', date: TODAY }), TODAY, MON_10_15);
+
+    expect(view.anytime.items.map((t) => t.title)).toEqual(['Learn Welsh', 'Buy stamps']);
+    expect(view.anytime.count).toBe(2);
+    expect(view.someday.count).toBe(0);
+  });
+
+  it('changes only the date and updated-at', () => {
+    expect(apply(base(), { type: 'dateTask', id: 'idea', date: TODAY }, MON_10_15).updates).toEqual([
+      { table: 'tasks', id: 'idea', set: { date: TODAY, updated_at: MON_10_15 } },
+    ]);
+  });
+
+  it('clears the Placement of a dated Task that is dated to another day', () => {
+    const state = aState({
+      events: [anEvent({ id: 'work' })],
+      tasks: [aTask({ id: 'placed', event_id: 'work' })],
+    });
+
+    expect(apply(state, { type: 'dateTask', id: 'placed', date: '2026-11-17' }, MON_10_15).updates).toEqual([
+      { table: 'tasks', id: 'placed', set: { date: '2026-11-17', event_id: null, updated_at: MON_10_15 } },
+    ]);
+  });
+
+  it('does nothing for a Task that already has that day and no Placement, or for a Sub-task', () => {
+    const state = aState({ tasks: [aTask({ id: 'open' }), aTask({ id: 'sub', parent_id: 'open' })] });
+
+    expect(apply(state, { type: 'dateTask', id: 'open', date: TODAY }, MON_10_15)).toEqual(NOTHING);
+    expect(apply(state, { type: 'dateTask', id: 'sub', date: '2026-11-17' }, MON_10_15)).toEqual(NOTHING);
+  });
+});
+
+describe('Someday stays out of the day', () => {
+  const state = () =>
+    aState({
+      events: [anEvent({ id: 'work', start_time: '09:00', end_time: '11:00' })],
+      tasks: [
+        aTask({ id: 'idea', title: 'Learn Welsh', date: null }),
+        aTask({ id: 'project', title: 'Paint shed', date: null }),
+        aTask({ id: 'first-coat', title: 'First coat', parent_id: 'project' }),
+        aTask({ id: 'today', title: 'Buy stamps', date: TODAY }),
+      ],
+    });
+
+  it("keeps Someday Tasks, and the Sub-tasks that follow them, out of Today's sections", () => {
+    const view = dayView(state(), TODAY, MON_10_15);
+
+    expect(view.anytime.items.map((t) => t.title)).toEqual(['Buy stamps']);
+    expect(view.done.total).toBe(1);
+    expect(view.now.cards[0]?.tasks).toEqual([]);
+  });
+
+  it("keeps them out of the strip's dot counts on every day", () => {
+    const view = dayView(state(), TODAY, MON_10_15);
+
+    expect(view.strip.map((d) => d.tasks)).toEqual([1, 0, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it('keeps them out of the day view of any other day too', () => {
+    const view = dayView(state(), '2026-11-18', MON_10_15);
+
+    expect(view.anytime.count).toBe(0);
+    expect(view.someday.count).toBe(2); // Someday is the same on every day
+  });
+
+  it("drops a Task from the strip's dot count when it is sent to Someday, and brings it back with \"Do today\"", () => {
+    const sent = run(state(), { type: 'undateTask', id: 'today' });
+    expect(dayView(sent, TODAY, MON_10_15).strip[0]?.tasks).toBe(0);
+
+    const back = run(sent, { type: 'dateTask', id: 'today', date: TODAY });
+    expect(dayView(back, TODAY, MON_10_15).strip[0]?.tasks).toBe(1);
+  });
+
+  it('marks the Tasks listed in Someday so the menu can offer "Do today"', () => {
+    const view = dayView(state(), TODAY, MON_10_15);
+
+    expect(view.someday.items.every((i) => i.someday)).toBe(true);
+    expect(view.anytime.items.every((i) => !i.someday)).toBe(true);
+  });
+});

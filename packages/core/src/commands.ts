@@ -1,5 +1,5 @@
 import { checkEventTimes, normaliseTime } from './event-input.ts';
-import type { Changes, Command, EventRow, Now, State, TaskRow } from './types.ts';
+import type { Changes, Command, DateStr, EventRow, Now, State, TaskRow } from './types.ts';
 import { noChanges } from './types.ts';
 
 /** Run one command against the current state. Pure: returns the changed rows, never mutates `state`. */
@@ -21,6 +21,8 @@ export function apply(state: State, command: Command, now: Now): Changes {
       return unplaceTask(state, command.id, now);
     case 'undateTask':
       return undateTask(state, command.id, now);
+    case 'dateTask':
+      return dateTask(state, command.id, command.date, now);
     case 'tickTask':
       return tickTask(state, command.id, now);
     case 'untickTask':
@@ -168,6 +170,13 @@ function undateTask(state: State, id: string, now: Now): Changes {
   if (!canUndate(state, id)) return noChanges();
   const task = liveTask(state, id)!;
   return updateTask(id, { date: null, ...(task.event_id ? { event_id: null } : {}), updated_at: now });
+}
+
+/** The Task takes the day and loses its Placement, so it is in Anytime on that day. */
+function dateTask(state: State, id: string, date: DateStr, now: Now): Changes {
+  const task = liveTask(state, id);
+  if (!task || task.parent_id || (task.date === date && !task.event_id)) return noChanges();
+  return updateTask(id, { date, ...(task.event_id ? { event_id: null } : {}), updated_at: now });
 }
 
 /** Ticking records the Completion time. A Task that is already done keeps the time it has. */
