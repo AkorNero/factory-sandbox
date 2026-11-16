@@ -36,6 +36,9 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
   const state = useStoreState();
   const [now, setNow] = useState(() => clock.now());
   useEffect(() => clock.subscribe(() => setNow(clock.now())), [clock]);
+  // the midnight jobs: on first start (after a midnight missed while closed) and at every local midnight
+  useEffect(() => clock.onNewDay(() => void runCommand(db, { type: 'runMidnight' }, clock.now())), [clock, db]);
+  const [dismissed, setDismissed] = useState(() => readDismissed());
 
   const todayDate = today(now);
   // the day opened from the strip; Today until one is tapped (a day that has passed falls back to Today)
@@ -119,6 +122,15 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
                 if (opened === d) setOpened(null);
               }}
             />
+            {view.overnight.carried.length + view.overnight.skipped.length > 0 && dismissed !== todayDate && (
+              <OvernightBanner
+                overnight={view.overnight}
+                onDismiss={() => {
+                  setDismissed(todayDate);
+                  writeDismissed(todayDate);
+                }}
+              />
+            )}
             {view.isToday && <NowAndNext view={view} actions={actions} />}
             {!view.isToday && (
               <DayEvents
@@ -276,6 +288,61 @@ function Strip({
         onChange={(e) => canPickDay(now, e.target.value) && onPick(e.target.value)}
       />
     </div>
+  );
+}
+
+/** The banner is dismissed per device, for the day it was about. Browser storage may be unavailable. */
+const DISMISSED_KEY = 'overnight-dismissed';
+const readDismissed = (): string | null => {
+  try {
+    return localStorage.getItem(DISMISSED_KEY);
+  } catch {
+    return null;
+  }
+};
+const writeDismissed = (date: string) => {
+  try {
+    localStorage.setItem(DISMISSED_KEY, date);
+  } catch {
+    /* the banner just comes back on reload */
+  }
+};
+
+const BANNER_SHOWN = 5;
+
+/** "Overnight: carried over A, B (Placements cleared) · skipped C". It may be long, so it collapses. */
+function OvernightBanner({ overnight, onDismiss }: { overnight: DayView['overnight']; onDismiss: () => void }) {
+  const [all, setAll] = useState(false);
+  const names = (items: ItemView[]) => items.map(label);
+  const entries = [...names(overnight.carried).map((n) => ({ n, kind: 'carried' })), ...names(overnight.skipped).map((n) => ({ n, kind: 'skipped' }))];
+  const shown = all ? entries : entries.slice(0, BANNER_SHOWN);
+  const part = (kind: string) => shown.filter((e) => e.kind === kind).map((e) => e.n).join(', ');
+  const more = entries.length - BANNER_SHOWN;
+  return (
+    <section className="banner" aria-label="Overnight">
+      <p>
+        <strong>Overnight:</strong>
+        {part('carried') && (
+          <>
+            {' '}
+            carried over <b>{part('carried')}</b> (Placements cleared)
+          </>
+        )}
+        {part('skipped') && (
+          <>
+            {part('carried') && ' · '} skipped <b>{part('skipped')}</b>
+          </>
+        )}{' '}
+        {more > 0 && (
+          <button type="button" className="linklike" onClick={() => setAll(!all)}>
+            {all ? 'Show less' : `+${more} more`}
+          </button>
+        )}
+      </p>
+      <button type="button" className="dismiss" aria-label="Dismiss overnight banner" onClick={onDismiss}>
+        ✕
+      </button>
+    </section>
   );
 }
 

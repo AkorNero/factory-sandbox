@@ -35,6 +35,10 @@ export interface TaskRow {
   completed_at: string | null;
   skipped_at: string | null;
   carried_over: boolean;
+  /** The day the midnight job last carried it over to (the banner lists these); null when never carried. */
+  carried_on: DateStr | null;
+  /** The Event whose Placement the first Carry-over cleared: it keeps showing a missed slot. */
+  carried_from_event_id: string | null;
   position: number;
   series_id: string | null;
   occurrence_date: DateStr | null;
@@ -165,4 +169,9 @@ export type Command =
    */
   | { type: 'setRecurrence'; id: string; seriesId: string; recurrence: RecurrenceRule }
   /** Make the Occurrences that fall on these days and do not exist yet. The UI asks for the days it is about to show. */
-  | { type: 'materialise'; dates: DateStr[] };
+  | { type: 'materialise'; dates: DateStr[] }
+  /**
+   * The midnight jobs, run on every device at local midnight and on the first start after a missed one.
+   * Today is the date of `now`; the result does not depend on the time of day, so two devices agree.
+   */
+  | { type: 'runMidnight' };

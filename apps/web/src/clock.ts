@@ -1,4 +1,4 @@
-import type { Now } from '@dayplanner/core';
+import { dateOf, type Now } from '@dayplanner/core';
 
 /**
  * The single source of "now" for the UI (and later the midnight jobs).
@@ -9,6 +9,12 @@ export interface Clock {
   now(): Now;
   /** Called at the start of every minute, and whenever the tab becomes visible again. Returns an unsubscribe. */
   subscribe(listener: () => void): () => void;
+  /**
+   * Called right away, which is the first start after any midnight missed while the app was closed, and then
+   * whenever the local date changes (at local midnight, or when the tab wakes up on a later day).
+   * This is what drives the midnight jobs. Returns an unsubscribe.
+   */
+  onNewDay(listener: () => void): () => void;
 }
 
 const pad = (n: number, w = 2) => String(n).padStart(w, '0');
@@ -25,7 +31,7 @@ export function formatLocal(d: Date): Now {
 }
 
 export function createClock(): Clock {
-  return {
+  const clock: Clock = {
     now: () => formatLocal(new Date()),
     subscribe(listener) {
       let timer: ReturnType<typeof setTimeout>;
@@ -46,5 +52,17 @@ export function createClock(): Clock {
         document.removeEventListener('visibilitychange', onVisible);
       };
     },
+    onNewDay(listener) {
+      let last: string | null = null;
+      const check = () => {
+        const day = dateOf(clock.now());
+        if (day === last) return;
+        last = day;
+        listener();
+      };
+      check();
+      return clock.subscribe(check);
+    },
   };
+  return clock;
 }

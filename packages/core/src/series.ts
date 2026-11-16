@@ -58,6 +58,8 @@ export function materialise(state: State, dates: DateStr[], now: Now): Changes {
         completed_at: null,
         skipped_at: null,
         carried_over: false,
+        carried_on: null,
+        carried_from_event_id: null,
         position: position++,
         series_id: null,
         occurrence_date: null,

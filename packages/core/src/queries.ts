@@ -83,6 +83,8 @@ export interface DayView {
   done: { count: number; total: number; items: ItemView[] };
   someday: { count: number; items: ItemView[] };
   strip: StripDay[];
+  /** What the midnight jobs did to the current day (today of "now"), whichever day is open. */
+  overnight: { carried: ItemView[]; skipped: ItemView[] };
 }
 
 const STRIP_DAYS = 8; // today and the next 7
@@ -106,6 +108,7 @@ function eventSections(
   placed: (eventId: string) => ItemView[],
   doneIn: (eventId: string) => ItemView[],
   recurrence: (seriesId: string | null) => string | null,
+  carriedOut: (eventId: string) => boolean,
 ) {
   const day = events.filter((e) => !e.deleted_at && e.date === date);
   const isToday = date === dateOf(now);
@@ -125,7 +128,7 @@ function eventSections(
     startsInMinutes: isToday ? minutesOf(e.start_time) - nowMin : null,
     endedMinutesAgo: isToday ? nowMin - minutesOf(e.end_time) : null,
     ...placedCounts(placed(e.id)),
-    slotMissed: phase(e) === 'earlier' && placed(e.id).some((t) => !t.completedTime),
+    slotMissed: phase(e) === 'earlier' && (carriedOut(e.id) || placed(e.id).some((t) => !t.completedTime)),
     doneHere: doneIn(e.id),
   });
   const byStart = (a: EventRow, b: EventRow) =>
@@ -180,9 +183,14 @@ function itemContext(state: State, now: Now) {
   const events = new Map(state.events.filter((e) => !e.deleted_at).map((e) => [e.id, e]));
   /** The Event a Task is placed in; a Placement that points at a missing Event counts as Unplaced. */
   const placedIn = (t: TaskRow) => (t.event_id ? events.get(t.event_id) : undefined);
-  /** An item's effective day: its Event's date if placed, else its own date (Task) or its parent's day (Sub-task). */
+  /**
+   * An item's effective day: its Event's date if placed, else its own date (Task) or its parent's day (Sub-task).
+   * A done Sub-task without a Placement stays on the day it was done, so its parent moving on (Carry-over) does not
+   * drag finished work to another day.
+   */
   const effectiveDay = (t: TaskRow): DateStr | null =>
-    placedIn(t)?.date ?? (t.parent_id ? (byId.get(t.parent_id)?.date ?? null) : t.date);
+    placedIn(t)?.date ??
+    (t.parent_id ? (t.completed_at ? dateOf(t.completed_at) : (byId.get(t.parent_id)?.date ?? null)) : t.date);
 
   const seriesLabels = new Map(state.series.map((s) => [s.id, recurrenceLabel(s)]));
   const recurrenceOf = (seriesId: string | null) => (seriesId ? (seriesLabels.get(seriesId) ?? null) : null);
@@ -220,11 +228,18 @@ export function taskItem(state: State, id: string, now: Now): ItemView | undefin
 
 export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateStr[] = []): DayView {
   const { live, byId, events, placedIn, effectiveDay, isDone, toItem, recurrenceOf } = itemContext(state, now);
+  /**
+   * The items placed in an Event. Once the Event is in the past, the items Carry-over took out of it still count as
+   * placed in it: that slot was missed, and they are not forgotten there.
+   */
   const placed = (eventId: string) =>
     live
-      .filter((t) => t.event_id === eventId && !t.skipped_at)
+      .filter((t) => !t.skipped_at && (t.event_id === eventId || (isPast(eventId) && t.carried_from_event_id === eventId)))
       .sort((a, b) => a.position - b.position)
       .map(toItem);
+
+  const isPast = (eventId: string) => (events.get(eventId)?.date ?? '9999') < today(now);
+  const carriedOut = (eventId: string) => isPast(eventId) && live.some((t) => t.carried_from_event_id === eventId);
 
   const doneInEventId = (t: TaskRow) => (t.completed_at ? doneInEvent(t, events)?.id : undefined);
   const doneHere = (eventId: string) =>
@@ -256,13 +271,21 @@ export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateS
     };
   });
 
+  // the banner is about the night that started today: carried items are those marked with today's date
+  const leaves = live.filter((t) => !hasSubtasks.has(t.id)).sort((a, b) => a.position - b.position);
+  const overnight = {
+    carried: leaves.filter((t) => t.carried_on === start && !t.skipped_at).map(toItem),
+    skipped: leaves.filter((t) => t.skipped_at && dateOf(t.skipped_at) === start).map(toItem),
+  };
+
   return {
     date,
     isToday: date === dateOf(now),
-    ...eventSections(state.events, date, now, placed, doneHere, recurrenceOf),
+    ...eventSections(state.events, date, now, placed, doneHere, recurrenceOf, carriedOut),
     anytime: { count: anytime.length, items: anytime.map(toItem) },
     done: { count: done.length, total: dayTasks.length, items: done.map(toItem) },
     someday: { count: someday.length, items: someday.map(toItem) },
     strip,
+    overnight,
   };
 }

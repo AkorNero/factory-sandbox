@@ -32,6 +32,8 @@ CREATE TABLE tasks (
   completed_at       text,                  -- the Completion time; never set on a parent
   skipped_at         text,
   carried_over       boolean NOT NULL DEFAULT false,
+  carried_on         text,                  -- the day the midnight job last carried it to; the overnight banner lists these
+  carried_from_event_id text,               -- the Event whose Placement Carry-over cleared: it keeps showing a missed slot
   position           double precision NOT NULL DEFAULT 0,
   series_id          text,
   occurrence_date    text,
