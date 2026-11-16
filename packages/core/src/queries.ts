@@ -93,7 +93,14 @@ const placedCounts = (tasks: ItemView[]) => ({
 });
 
 /** Where the day's Events stand against the clock. */
-function eventSections(events: EventRow[], date: DateStr, now: Now, placed: (eventId: string) => ItemView[], doneIn: (eventId: string) => ItemView[]) {
+function eventSections(
+  events: EventRow[],
+  date: DateStr,
+  now: Now,
+  placed: (eventId: string) => ItemView[],
+  doneIn: (eventId: string) => ItemView[],
+  carriedOut: (eventId: string) => boolean,
+) {
   const day = events.filter((e) => !e.deleted_at && e.date === date);
   const isToday = date === dateOf(now);
   const nowMin = minutesOf(timeOf(now));
@@ -111,7 +118,7 @@ function eventSections(events: EventRow[], date: DateStr, now: Now, placed: (eve
     startsInMinutes: isToday ? minutesOf(e.start_time) - nowMin : null,
     endedMinutesAgo: isToday ? nowMin - minutesOf(e.end_time) : null,
     ...placedCounts(placed(e.id)),
-    slotMissed: phase(e) === 'earlier' && placed(e.id).some((t) => !t.completedTime),
+    slotMissed: phase(e) === 'earlier' && (carriedOut(e.id) || placed(e.id).some((t) => !t.completedTime)),
     doneHere: doneIn(e.id),
   });
   const byStart = (a: EventRow, b: EventRow) =>
@@ -202,11 +209,18 @@ export function taskItem(state: State, id: string, now: Now): ItemView | undefin
 
 export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateStr[] = []): DayView {
   const { live, byId, events, placedIn, effectiveDay, isDone, toItem } = itemContext(state, now);
+  /**
+   * The items placed in an Event. Once the Event is in the past, the items Carry-over took out of it still count as
+   * placed in it: that slot was missed, and they are not forgotten there.
+   */
   const placed = (eventId: string) =>
     live
-      .filter((t) => t.event_id === eventId && !t.skipped_at)
+      .filter((t) => !t.skipped_at && (t.event_id === eventId || (isPast(eventId) && t.carried_from_event_id === eventId)))
       .sort((a, b) => a.position - b.position)
       .map(toItem);
+
+  const isPast = (eventId: string) => (events.get(eventId)?.date ?? '9999') < today(now);
+  const carriedOut = (eventId: string) => isPast(eventId) && live.some((t) => t.carried_from_event_id === eventId);
 
   const doneInEventId = (t: TaskRow) => (t.completed_at ? doneInEvent(t, events)?.id : undefined);
   const doneHere = (eventId: string) =>
@@ -241,7 +255,7 @@ export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateS
   return {
     date,
     isToday: date === dateOf(now),
-    ...eventSections(state.events, date, now, placed, doneHere),
+    ...eventSections(state.events, date, now, placed, doneHere, carriedOut),
     anytime: { count: anytime.length, items: anytime.map(toItem) },
     done: { count: done.length, total: dayTasks.length, items: done.map(toItem) },
     someday: { count: someday.length, items: someday.map(toItem) },
