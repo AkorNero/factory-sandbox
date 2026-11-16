@@ -1,7 +1,9 @@
 import {
   addDays,
+  asksScope,
   canAddSubtask,
   canDateTask,
+  canEditSchedule,
   canMoveEvent,
   canPickDay,
   canPlace,
@@ -15,6 +17,7 @@ import {
   type DayView,
   type ItemView,
   type RecurrenceRule,
+  type Scope,
   type State,
   type StripDay,
 } from '@dayplanner/core';
@@ -26,6 +29,7 @@ import { anytimeDrop, dayDrop, DragProvider, type DragSource, type DropTarget } 
 import { DayEvents, DayTabs, EventMenu, NowAndNext, type EventActions } from './Events.tsx';
 import { AddField, Pill, label, type ItemActions } from './Items.tsx';
 import { RepeatSection } from './Repeat.tsx';
+import { ScopePrompt, useScopeAsk } from './Scope.tsx';
 import { runCommand, useStoreState } from './store/adapter.ts';
 
 /** Local calendar math for labels only: dates are plain strings, so go through UTC to avoid timezone shifts. */
@@ -153,6 +157,8 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
                 canSend={canUndate(state!, menuItem.id)}
                 canAddSub={canAddSubtask(state!, menuItem.parentId ?? menuItem.id)}
                 canRepeat={canRepeat(state!, menuItem.id)}
+                asksScope={asksScope(state!, menuItem.id)}
+                canEditSchedule={canEditSchedule(state!, menuItem.id, now)}
                 canDoParentToday={!!menuItem.parentId && canDateTask(state!, menuItem.parentId, todayDate)}
                 today={todayDate}
                 onClose={() => setMenuId(null)}
@@ -174,11 +180,15 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
             key={menuEvent.id}
             event={menuEvent}
             onClose={() => setEventMenuId(null)}
-            onSave={async (title, start, end) => {
-              await run({ type: 'renameEvent', id: menuEvent.id, title });
-              await run({ type: 'setEventTimes', id: menuEvent.id, start, end });
+            onSave={async (title, start, end, scope) => {
+              await run({ type: 'renameEvent', id: menuEvent.id, title, scope });
+              await run({ type: 'setEventTimes', id: menuEvent.id, start, end, scope });
             }}
-            onDelete={() => run({ type: 'deleteEvent', id: menuEvent.id })}
+            onDelete={(scope) => run({ type: 'deleteEvent', id: menuEvent.id, scope })}
+            asksScope={asksScope(state!, menuEvent.id)}
+            canEditSchedule={canEditSchedule(state!, menuEvent.id, now)}
+            onChangeSchedule={(recurrence) => run({ type: 'changeSchedule', id: menuEvent.id, seriesId: crypto.randomUUID(), recurrence })}
+            onStop={() => run({ type: 'stopRepeating', id: menuEvent.id })}
             recurrence={menuSeries ? recurrenceLabel(menuSeries) : null}
             canRepeat={canRepeat(state!, menuEvent.id)}
             onRepeat={(recurrence) => run({ type: 'setRecurrence', id: menuEvent.id, seriesId: crypto.randomUUID(), recurrence })}
@@ -414,6 +424,8 @@ function TaskMenu({
   canAddSub,
   canDoParentToday,
   canRepeat: repeatable,
+  asksScope: asks,
+  canEditSchedule: schedulable,
   today,
   onClose,
   run,
@@ -427,10 +439,15 @@ function TaskMenu({
   canDoParentToday: boolean;
   /** The core says "Repeat…" is offered for this Task. */
   canRepeat: boolean;
+  /** The core says a menu edit of this item must ask which Occurrences it reaches. */
+  asksScope: boolean;
+  /** The core says "Change schedule" and "Stop repeating" are offered for this Occurrence. */
+  canEditSchedule: boolean;
   today: string;
   onClose: () => void;
   run: (c: Command) => Promise<unknown>;
 }) {
+  const scope = useScopeAsk(asks);
   const [title, setTitle] = useState(item.title);
   const [time, setTime] = useState(item.completedTime ?? '');
   const [added, setAdded] = useState<string[]>([]);
@@ -442,19 +459,28 @@ function TaskMenu({
     const text = input.value.trim();
     if (!text) return;
     input.value = '';
-    await run({ type: 'addSubtask', id: crypto.randomUUID(), parentId, title: text });
-    setAdded((a) => [...a, text]);
+    scope.ask(async (chosen: Scope | undefined) => {
+      await run({ type: 'addSubtask', id: crypto.randomUUID(), parentId, title: text, scope: chosen });
+      setAdded((a) => [...a, text]);
+    });
   };
   const save = async (e: FormEvent) => {
     e.preventDefault();
-    await run({ type: 'renameTask', id: item.id, title });
-    if (item.completedTime && time) await run({ type: 'setCompletionTime', id: item.id, time });
-    onClose();
+    const finish = async () => {
+      if (item.completedTime && time) await run({ type: 'setCompletionTime', id: item.id, time });
+      onClose();
+    };
+    if (title.trim() === item.title) return finish();
+    scope.ask(async (chosen) => {
+      await run({ type: 'renameTask', id: item.id, title, scope: chosen });
+      await finish();
+    });
   };
-  const remove = async () => {
-    await run({ type: 'deleteTask', id: item.id });
-    onClose();
-  };
+  const remove = () =>
+    scope.ask(async (chosen) => {
+      await run({ type: 'deleteTask', id: item.id, scope: chosen });
+      onClose();
+    });
   const takeOut = async () => {
     await run({ type: 'unplaceTask', id: item.id });
     onClose();
@@ -501,7 +527,15 @@ function TaskMenu({
             onKeyDown={addSub}
           />
         )}
-        <RepeatSection recurrence={item.recurrence} canRepeat={repeatable} onRepeat={(recurrence) => runAndClose({ type: 'setRecurrence', id: item.id, seriesId: crypto.randomUUID(), recurrence })} />
+        <RepeatSection
+          recurrence={item.recurrence}
+          canRepeat={repeatable}
+          onRepeat={(recurrence) => runAndClose({ type: 'setRecurrence', id: item.id, seriesId: crypto.randomUUID(), recurrence })}
+          canEditSchedule={schedulable}
+          onChangeSchedule={(recurrence) => runAndClose({ type: 'changeSchedule', id: item.id, seriesId: crypto.randomUUID(), recurrence })}
+          onStop={() => runAndClose({ type: 'stopRepeating', id: item.id })}
+        />
+        <ScopePrompt ask={scope} />
         <div className="actions">
           <button type="submit" className="primary">Save</button>
           <button type="button" onClick={onClose}>Cancel</button>

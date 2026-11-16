@@ -5,9 +5,15 @@ import type { Changes, Command, DateStr, EventRow, Now, State, TaskRow } from '.
 import { noChanges } from './types.ts';
 import { nextArrivesBy } from './recurrence.ts';
 import { materialise, setRecurrence } from './series.ts';
+import { changeSchedule, editFollowing, stopRepeating } from './series-edit.ts';
 
 /** Run one command against the current state. Pure: returns the changed rows, never mutates `state`. */
 export function apply(state: State, command: Command, now: Now): Changes {
+  // a "this and following" edit of an Occurrence reaches later Occurrences; anything else is the plain edit below
+  if ('scope' in command && command.scope === 'following') {
+    const changes = editFollowing(state, command, now);
+    if (changes) return changes;
+  }
   switch (command.type) {
     case 'addTask':
       return addTask(state, command, now);
@@ -43,6 +49,10 @@ export function apply(state: State, command: Command, now: Now): Changes {
       return deleteTask(state, command.id, now);
     case 'setRecurrence':
       return setRecurrence(state, command, now);
+    case 'changeSchedule':
+      return changeSchedule(state, command, now);
+    case 'stopRepeating':
+      return stopRepeating(state, command.id, now);
     case 'materialise':
       return materialise(state, command.dates, now);
     case 'runMidnight':
@@ -86,7 +96,7 @@ export function canAddSubtask(state: State, id: string): boolean {
   return !!task && !task.parent_id;
 }
 
-function addSubtask(state: State, cmd: Extract<Command, { type: 'addSubtask' }>, now: Now): Changes {
+export function addSubtask(state: State, cmd: Extract<Command, { type: 'addSubtask' }>, now: Now): Changes {
   const title = cmd.title.trim();
   const parent = liveTask(state, cmd.parentId);
   if (!title || !parent || !canAddSubtask(state, parent.id)) return noChanges();
@@ -163,18 +173,22 @@ function setEventTimes(state: State, cmd: Extract<Command, { type: 'setEventTime
   return updateEvent(event.id, set, now);
 }
 
-/** Deleting an Event deletes only the Event: its items are left Unplaced, on the day the Event was on. */
-function deleteEvent(state: State, cmd: Extract<Command, { type: 'deleteEvent' }>, now: Now): Changes {
-  const event = findEvent(state, cmd.id);
-  if (!event) return noChanges();
-  const updates = state.tasks
+/** The updates that leave the Event's items Unplaced, on the day the Event was on (a Sub-task follows its parent's day). */
+export function unplaceItemsOf(state: State, event: EventRow, now: Now) {
+  return state.tasks
     .filter((t) => t.event_id === event.id && !t.deleted_at)
     .map((t) => ({
       table: 'tasks' as const,
       id: t.id,
-      // a Sub-task has no day of its own: it follows its parent
       set: { event_id: null, ...(t.parent_id || t.date === event.date ? {} : { date: event.date }), updated_at: now },
     }));
+}
+
+/** Deleting an Event deletes only the Event: its items are left Unplaced, on the day the Event was on. */
+function deleteEvent(state: State, cmd: Extract<Command, { type: 'deleteEvent' }>, now: Now): Changes {
+  const event = findEvent(state, cmd.id);
+  if (!event) return noChanges();
+  const updates = unplaceItemsOf(state, event, now);
   // an Occurrence is kept, marked deleted, so no device makes it again; a one-off Event is removed
   if (event.series_id) return { inserts: [], updates: [...updates, ...updateEvent(event.id, { deleted_at: now }, now).updates], deletes: [] };
   return { inserts: [], updates, deletes: [{ table: 'events', id: cmd.id }] };
@@ -291,8 +305,16 @@ const placedOpenSubtasks = (state: State, id: string) => subtasksOf(state, id).f
  * along: their Placements are cleared, so they follow it. Done Sub-tasks keep theirs.
  */
 export function dateTask(state: State, id: string, date: DateStr, now: Now): Changes {
-  if (!canDateTask(state, id, date)) return noChanges();
-  const task = liveTask(state, id)!;
+  return canDateTask(state, id, date) ? setTaskDay(state, id, date, now) : noChanges();
+}
+
+/**
+ * Dating without the drag limit: for the rebuild of a schedule, which removes the Occurrences the limit protects the
+ * Task from. The Task takes the day and loses its Placement, like a drop.
+ */
+export function setTaskDay(state: State, id: string, date: DateStr, now: Now): Changes {
+  const task = liveTask(state, id);
+  if (!task) return noChanges();
   const set: Record<string, unknown> = {};
   if (task.date !== date) set.date = date;
   if (task.event_id !== null) set.event_id = null;

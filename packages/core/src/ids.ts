@@ -12,3 +12,9 @@ export const occurrenceId = (seriesId: string, date: DateStr): string => v5(`${s
 
 /** A Sub-task of an Occurrence: from the Occurrence's id and the series' Sub-task key. */
 export const occurrenceSubtaskId = (occurrenceId: string, subtaskKey: string): string => v5(`${occurrenceId}|${subtaskKey}`, OCCURRENCE_NS);
+
+/**
+ * The id of the segment a "this and following" edit splits off a series at a day. Fixed by the segment and the day, so
+ * two devices making the same edit write the same row.
+ */
+export const splitSeriesId = (seriesId: string, date: DateStr): string => v5(`${seriesId}|split|${date}`, OCCURRENCE_NS);

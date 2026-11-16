@@ -126,6 +126,13 @@ export interface Changes {
 }
 export const noChanges = (): Changes => ({ inserts: [], updates: [], deletes: [] });
 
+/**
+ * How far a menu edit on an Occurrence reaches: just that Occurrence, or it and every later one. There is no
+ * "Whole series". The UI asks for it on every menu edit of an Occurrence; ticking and dragging never carry one.
+ * Left out, or on anything that is not an Occurrence, an edit is "Just this one".
+ */
+export type Scope = 'one' | 'following';
+
 /** Commands in. Ids are made by the caller (UUIDs), which keeps the core pure. */
 export type Command =
   | {
@@ -138,11 +145,11 @@ export type Command =
       eventId?: string;
     }
   /** Add a Sub-task to a Task. A Sub-task never has Sub-tasks, and has no day of its own. */
-  | { type: 'addSubtask'; id: string; parentId: string; title: string }
+  | { type: 'addSubtask'; id: string; parentId: string; title: string; scope?: Scope }
   | { type: 'addEvent'; id: string; title: string; date: DateStr; start: TimeStr; end: TimeStr }
-  | { type: 'renameEvent'; id: string; title: string }
-  | { type: 'setEventTimes'; id: string; start: TimeStr; end: TimeStr }
-  | { type: 'deleteEvent'; id: string }
+  | { type: 'renameEvent'; id: string; title: string; scope?: Scope }
+  | { type: 'setEventTimes'; id: string; start: TimeStr; end: TimeStr; scope?: Scope }
+  | { type: 'deleteEvent'; id: string; scope?: Scope }
   /** Move an Event to another day; the Tasks placed in it come along, still placed. */
   | { type: 'moveEvent'; id: string; date: DateStr }
   /** Place a Task or Sub-task into an Event (a Task takes the Event's day). */
@@ -160,14 +167,24 @@ export type Command =
   | { type: 'untickTask'; id: string }
   /** Edit a done Task's Completion time to `time` ('HH:MM') on the day it already has. */
   | { type: 'setCompletionTime'; id: string; time: TimeStr }
-  | { type: 'renameTask'; id: string; title: string }
-  | { type: 'deleteTask'; id: string }
+  /** A Sub-task of an Occurrence takes its scope the same way: "this and following" renames the same Sub-task in later Occurrences. */
+  | { type: 'renameTask'; id: string; title: string; scope?: Scope }
+  | { type: 'deleteTask'; id: string; scope?: Scope }
   /**
    * Set a Recurrence on a Task or Event (not a Sub-task, a done Task, or one that already recurs). The item becomes
    * the first Occurrence, on the first matching day from its own day (from today for a Someday Task, which is then dated).
    * `seriesId` is made by the caller.
    */
   | { type: 'setRecurrence'; id: string; seriesId: string; recurrence: RecurrenceRule }
+  /**
+   * "Change schedule" on an open Occurrence (always "this and following"): every later Occurrence, hand-edited ones
+   * included, is removed and rebuilt on the new rule, which starts from this Occurrence. Items placed in a removed Event
+   * Occurrence become unplaced but keep their day. Done and Skipped Occurrences and earlier days are never changed.
+   * `seriesId` is the new segment's id, made by the caller.
+   */
+  | { type: 'changeSchedule'; id: string; seriesId: string; recurrence: RecurrenceRule }
+  /** "Stop repeating" on an open Occurrence: it stays as a plain one-off and the later Occurrences are removed. */
+  | { type: 'stopRepeating'; id: string }
   /** Make the Occurrences that fall on these days and do not exist yet. The UI asks for the days it is about to show. */
   | { type: 'materialise'; dates: DateStr[] }
   /**

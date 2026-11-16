@@ -6,11 +6,13 @@ import {
   type EventCard,
   type NowCard,
   type RecurrenceRule,
+  type Scope,
 } from '@dayplanner/core';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { eventDrop, somedayDrop, useDrag } from './drag.tsx';
 import { AddField, Recurrence, TaskRows, type ItemActions } from './Items.tsx';
 import { RepeatSection } from './Repeat.tsx';
+import { ScopePrompt, useScopeAsk } from './Scope.tsx';
 import './events.css';
 
 /** The Events part of Today: Now, Next, and the Later today / Earlier today tabs. No rules in here. */
@@ -296,17 +298,29 @@ export function EventMenu({
   recurrence,
   canRepeat,
   onRepeat,
+  asksScope,
+  canEditSchedule,
+  onChangeSchedule,
+  onStop,
 }: {
   event: { id: string; title: string; start_time: string; end_time: string };
   onClose: () => void;
-  onSave: (title: string, start: string, end: string) => Promise<unknown>;
-  onDelete: () => Promise<unknown>;
+  /** `scope` is set when the Event is an Occurrence: the answer to "Just this one" / "This and following". */
+  onSave: (title: string, start: string, end: string, scope?: Scope) => Promise<unknown>;
+  onDelete: (scope?: Scope) => Promise<unknown>;
   /** The short name of its Recurrence; null for a one-off Event. */
   recurrence: string | null;
   /** The core says "Repeat…" is offered. */
   canRepeat: boolean;
   onRepeat: (rule: RecurrenceRule) => Promise<unknown>;
+  /** The core says an edit of this Event must ask which Occurrences it reaches. */
+  asksScope: boolean;
+  /** The core says its schedule can be changed or stopped. */
+  canEditSchedule: boolean;
+  onChangeSchedule: (rule: RecurrenceRule) => Promise<unknown>;
+  onStop: () => Promise<unknown>;
 }) {
+  const scope = useScopeAsk(asksScope);
   const [title, setTitle] = useState(event.title);
   const [start, setStart] = useState(event.start_time);
   const [end, setEnd] = useState(event.end_time);
@@ -315,8 +329,12 @@ export function EventMenu({
     e.preventDefault();
     const problem = checkEventTimes(start, end) ?? (title.trim() ? null : 'Give the Event a name.');
     if (problem) return setError(problem);
-    await onSave(title, start, end);
-    onClose();
+    const changed = title.trim() !== event.title || start !== event.start_time || end !== event.end_time;
+    if (!changed) return onClose();
+    scope.ask(async (chosen) => {
+      await onSave(title, start, end, chosen);
+      onClose();
+    });
   };
   return (
     <div className="backdrop" onClick={onClose}>
@@ -348,7 +366,17 @@ export function EventMenu({
             await onRepeat(rule);
             onClose();
           }}
+          canEditSchedule={canEditSchedule}
+          onChangeSchedule={async (rule) => {
+            await onChangeSchedule(rule);
+            onClose();
+          }}
+          onStop={async () => {
+            await onStop();
+            onClose();
+          }}
         />
+        <ScopePrompt ask={scope} />
         <div className="actions">
           <button type="submit" className="primary">
             Save
@@ -359,10 +387,12 @@ export function EventMenu({
           <button
             type="button"
             className="danger"
-            onClick={async () => {
-              await onDelete();
-              onClose();
-            }}
+            onClick={() =>
+              scope.ask(async (chosen) => {
+                await onDelete(chosen);
+                onClose();
+              })
+            }
           >
             Delete
           </button>
