@@ -1,5 +1,6 @@
 import { applyChanges, mergeChanges } from './changes.ts';
 import { today } from './dates.ts';
+import { nextArrivesBy } from './recurrence.ts';
 import type { Changes, Now, State, TaskRow, Update } from './types.ts';
 
 /**
@@ -14,7 +15,7 @@ type Step = (state: State, now: Now) => Changes;
  * In order. Each step sees the rows the one before it changed. Skipped (an Occurrence left undone when the next one
  * arrives, #31) goes first, so it is closed before Carry-over would move it on.
  */
-const STEPS: Step[] = [carryOver];
+const STEPS: Step[] = [skipped, carryOver];
 
 export function runMidnight(state: State, now: Now): Changes {
   let current = state;
@@ -31,6 +32,32 @@ export function runMidnight(state: State, now: Now): Changes {
 export const midnightStamp = (now: Now): string => `${today(now)}T00:00:00${now.slice(19)}`;
 
 const byId = (a: { id: string }, b: { id: string }) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+/**
+ * Skipped: a Task Occurrence still unfinished on the day the next Occurrence of its series arrives is closed
+ * without being done, and so are its unfinished Sub-tasks. Finished Sub-tasks keep their Completion time. The rows stay
+ * as a record. The next Occurrence is found from the schedule, not from rows, so it does not matter whether it has been
+ * made yet; and it is the Occurrence's own day (`occurrence_date`) that counts, not the day Carry-over has moved it to.
+ * It runs before Carry-over, which leaves Skipped items alone, so a recurring Task never has two open Occurrences.
+ */
+function skipped(state: State, now: Now): Changes {
+  const day = today(now);
+  const stamp = midnightStamp(now);
+  const tasks = state.tasks.filter((t) => !t.deleted_at);
+  const isOpen = (t: TaskRow) => !t.completed_at && !t.skipped_at;
+
+  const updates: Update[] = [];
+  for (const t of [...tasks].sort(byId)) {
+    if (t.parent_id || !t.series_id || !t.occurrence_date || t.skipped_at) continue;
+    if (!nextArrivesBy(state.series, t.series_id, t.occurrence_date, day)) continue;
+    const subs = tasks.filter((s) => s.parent_id === t.id);
+    // done exactly when all its Sub-tasks are (a Task without any: when it has a Completion time)
+    if (subs.length ? !subs.some(isOpen) : !isOpen(t)) continue;
+    updates.push({ table: 'tasks', id: t.id, set: { skipped_at: stamp, updated_at: stamp } });
+    for (const s of subs.filter(isOpen)) updates.push({ table: 'tasks', id: s.id, set: { skipped_at: stamp, updated_at: stamp } });
+  }
+  return { inserts: [], updates, deletes: [] };
+}
 
 /**
  * Carry-over: every unfinished dated Task and Sub-task from an earlier day moves to today, however many days
