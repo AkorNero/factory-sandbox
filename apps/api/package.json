@@ -1,0 +1,29 @@
+{
+  "name": "@dayplanner/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "start": "node src/server.ts",
+    "dev": "node --watch src/server.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p .",
+    "build": "echo 'api runs from source (Node strips types); nothing to build'"
+  },
+  "dependencies": {
+    "@fastify/http-proxy": "11.6.9",
+    "@fastify/static": "10.1.11",
+    "fastify": "5.12.8",
+    "jose": "6.2.17",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@dayplanner/core": "*",
+    "@testcontainers/postgresql": "12.2.1",
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.15.0",
+    "typescript": "5.9.3",
+    "vitest": "5.1.0"
+  }
+}

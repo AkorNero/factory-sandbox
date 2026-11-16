@@ -1,0 +1,14 @@
+# One global Sync Stream: every row of every table goes to every device.
+# There is one user, so nothing is filtered per user.
+config:
+  edition: 3 # Sync Streams
+
+streams:
+  everything:
+    auto_subscribe: true # clients subscribe on connect, no explicit subscription needed
+    accept_potentially_dangerous_queries: true # intended: single user, no per-user filter
+    queries:
+      - SELECT * FROM events
+      - SELECT * FROM tasks
+      - SELECT * FROM series
+      - SELECT * FROM routines

@@ -1,0 +1,493 @@
+:root {
+  --bg: #f6f5f2;
+  --card: #fff;
+  --ink: #1d1d1f;
+  --mute: #6b6b70;
+  --line: #e3e1dc;
+  --accent: #2f6fde;
+  --accent-soft: #e6eefc;
+  --warn: #b5560d;
+  --warn-soft: #fdf0e4;
+  --ok: #2f8a4c;
+  --ghost: #9a9aa0;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161618;
+    --card: #202023;
+    --ink: #ececee;
+    --mute: #9a9aa2;
+    --line: #33333a;
+    --accent: #7aa5ff;
+    --accent-soft: #22304d;
+    --warn: #f0a35c;
+    --warn-soft: #3a2a1b;
+    --ok: #6fcf8f;
+    --ghost: #6e6e76;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+.main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 16px 16px 48px;
+}
+.top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+h1 {
+  font-size: 20px;
+  margin: 8px 0 12px;
+}
+.sync {
+  font-size: 12px;
+  color: var(--mute);
+}
+.sync.on {
+  color: var(--ok);
+}
+
+.sec {
+  margin: 20px 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--mute);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.count {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: rgba(127, 127, 127, 0.15);
+  border-radius: 9px;
+  padding: 1px 7px;
+}
+.mute {
+  color: var(--mute);
+  font-size: 12px;
+  margin: 4px 0 8px;
+}
+
+.strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.chip {
+  min-width: 66px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.chip.sel {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+.wd {
+  font-size: 11px;
+  text-transform: uppercase;
+}
+.dn {
+  font-size: 20px;
+  font-weight: 700;
+}
+.dots {
+  font-size: 10px;
+  min-height: 14px;
+  letter-spacing: 1px;
+}
+
+.pills {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.pill.carried {
+  border-color: var(--warn);
+}
+.pill.done {
+  opacity: 0.6;
+}
+.pill.dashed {
+  border-style: dashed;
+  color: var(--accent);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+}
+.tick {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--mute);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+}
+.label {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tick.parent {
+  border-style: dashed;
+}
+.tick.on {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #fff;
+}
+.badge {
+  font-size: 11px;
+  border-radius: 9px;
+  padding: 1px 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.badge.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.add {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px dashed var(--mute);
+  border-radius: 20px;
+  outline: none;
+}
+.add:focus {
+  border: 1px solid var(--accent);
+}
+
+.meter {
+  height: 8px;
+  background: var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.meter > div {
+  height: 100%;
+  background: var(--ok);
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.sheet {
+  width: 100%;
+  max-width: 640px;
+  background: var(--card);
+  border-radius: 18px 18px 0 0;
+  padding: 10px 16px 20px;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sheet .grab {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  align-self: center;
+}
+.sheet label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--mute);
+}
+.sheet input,
+.sheet select {
+  font: inherit;
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.sheet .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sheet .actions button {
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.sheet .actions .primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.sheet .actions .danger {
+  margin-left: auto;
+  color: #c0392b;
+}
+
+/* Upcoming strip: chips are buttons, each a drop target; "Pick a day" sits outside the scrolling part. */
+.stripbar {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  position: relative;
+}
+.strip {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 8px 4px 0;
+}
+.chipwrap {
+  position: relative;
+  display: flex;
+  flex: none;
+}
+button.chip {
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  min-height: 74px;
+}
+button.chip.sel {
+  color: var(--bg);
+}
+.chip-x {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--mute);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+.pick {
+  flex: none;
+  width: 58px;
+  margin-top: 8px;
+  margin-bottom: 4px;
+  border: 1px dashed var(--mute);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.pick-input {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Recurrence: the tag after a title, and the "Repeat…" picker in the tap menus. */
+.rtag {
+  font-size: 11px;
+  border-radius: 9px;
+  padding: 1px 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  white-space: nowrap;
+}
+.now-card .rtag {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+.repeat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.repeat legend {
+  font-size: 12px;
+  color: var(--mute);
+  padding: 0 4px;
+}
+.repeat small {
+  color: var(--mute);
+}
+.repeat .weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.repeat .chip-day {
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.repeat .chip-day.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.sheet .repeat-open {
+  font: inherit;
+  font-size: 14px;
+  align-self: flex-start;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.repeat .primary {
+  font: inherit;
+  font-size: 14px;
+  align-self: flex-start;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: #fff;
+  border-radius: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 14px;
+}
+.banner p {
+  flex: 1;
+  margin: 0;
+}
+.banner .dismiss,
+.banner .linklike {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.banner .linklike {
+  text-decoration: underline;
+}
+
+/* "Just this one" / "This and following" */
+.sheet .scope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+}
+.sheet .scope legend {
+  font-size: 12px;
+  color: var(--mute);
+  padding: 0 4px;
+}
+.sheet .scope button {
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.sheet .scope .primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.sheet .repeat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
