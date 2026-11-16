@@ -55,11 +55,11 @@ A rule that makes a Task or an Event repeat on its own on a fixed schedule: ever
 _Avoid_: Repeat, schedule
 
 **Occurrence**:
-One Task or Event made by a Recurrence, on one day. It can be ticked off, placed and moved like any other Task or Event. An Occurrence of an Event never brings Placements with it.
+One Task or Event made by a Recurrence, on one day. It can be ticked off, placed, moved, changed and deleted like any other Task or Event, even before its day arrives, and it stays linked to its Recurrence afterwards. A change to it applies either to just this one or to this and the following Occurrences; Occurrences on earlier days, done or Skipped are never changed. An Occurrence of an Event never brings Placements with it.
 _Avoid_: Instance, repeat, copy
 
 **Skipped**:
-An Occurrence of a Task left unfinished when the next Occurrence arrives. It is closed without being done, and so are its unfinished Sub-tasks.
+An Occurrence of a Task left unfinished when the next Occurrence arrives. It is closed without being done, and so are its unfinished Sub-tasks. It is kept as a record, unlike a deleted Occurrence, which leaves no trace.
 _Avoid_: Missed, expired
 
 **Routine**:
