@@ -12,6 +12,10 @@ export function apply(state: State, command: Command, now: Now): Changes {
       return untickTask(state, command.id, now);
     case 'setCompletionTime':
       return setCompletionTime(state, command.id, command.time, now);
+    case 'renameTask':
+      return renameTask(state, command.id, command.title, now);
+    case 'deleteTask':
+      return deleteTask(state, command.id);
   }
 }
 
@@ -70,6 +74,19 @@ function setCompletionTime(state: State, id: string, time: string, now: Now): Ch
   const completed = `${task.completed_at.slice(0, 11)}${time}:00${task.completed_at.slice(19)}`;
   if (completed === task.completed_at) return noChanges();
   return updateTask(id, { completed_at: completed, updated_at: now });
+}
+
+function renameTask(state: State, id: string, title: string, now: Now): Changes {
+  const task = liveTask(state, id);
+  const trimmed = title.trim();
+  if (!task || !trimmed || trimmed === task.title) return noChanges();
+  return updateTask(id, { title: trimmed, updated_at: now });
+}
+
+/** A one-off Task is hard-deleted. */
+function deleteTask(state: State, id: string): Changes {
+  if (!liveTask(state, id)) return noChanges();
+  return { inserts: [], updates: [], deletes: [{ table: 'tasks', id }] };
 }
 
 /** Apply changed rows to a state snapshot (used by tests, and by anything that wants the result in memory). */

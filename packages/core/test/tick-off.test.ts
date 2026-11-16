@@ -85,6 +85,64 @@ describe('editing a Completion time', () => {
   });
 });
 
+describe('renaming a Task from its tap menu', () => {
+  it('changes its title wherever it shows, open or done', () => {
+    const state = aState({
+      tasks: [
+        aTask({ id: 'a', title: 'Buy stamps' }),
+        aTask({ id: 'b', title: 'Cal Ann', completed_at: '2026-11-16T09:40:00+01:00' }),
+      ],
+    });
+
+    let after = applyChanges(state, apply(state, { type: 'renameTask', id: 'a', title: '  Buy stamps and envelopes ' }, MON_10_15));
+    after = applyChanges(after, apply(after, { type: 'renameTask', id: 'b', title: 'Call Ann' }, MON_10_15));
+
+    const view = dayView(after, TODAY, MON_10_15);
+    expect(view.anytime.items.map((i) => i.title)).toEqual(['Buy stamps and envelopes']);
+    expect(view.done.items.map((i) => i.title)).toEqual(['Call Ann']);
+  });
+
+  it('changes only the title and updated-at columns', () => {
+    const state = aState({ tasks: [aTask({ id: 'a', title: 'Old' })] });
+
+    expect(apply(state, { type: 'renameTask', id: 'a', title: 'New' }, MON_10_15).updates).toEqual([
+      { table: 'tasks', id: 'a', set: { title: 'New', updated_at: MON_10_15 } },
+    ]);
+  });
+
+  it('ignores an empty or unchanged title', () => {
+    const state = aState({ tasks: [aTask({ id: 'a', title: 'Same' })] });
+
+    expect(apply(state, { type: 'renameTask', id: 'a', title: '   ' }, MON_10_15).updates).toEqual([]);
+    expect(apply(state, { type: 'renameTask', id: 'a', title: ' Same ' }, MON_10_15).updates).toEqual([]);
+  });
+});
+
+describe('deleting a Task from its tap menu', () => {
+  it('removes an open Task from Anytime today and a done Task from Done today', () => {
+    const state = aState({
+      tasks: [
+        aTask({ id: 'a', title: 'Open' }),
+        aTask({ id: 'b', title: 'Finished', completed_at: '2026-11-16T09:40:00+01:00' }),
+        aTask({ id: 'c', title: 'Keeper' }),
+      ],
+    });
+
+    const changes = apply(state, { type: 'deleteTask', id: 'a' }, MON_10_15);
+    const after = applyChanges(applyChanges(state, changes), apply(state, { type: 'deleteTask', id: 'b' }, MON_10_15));
+
+    expect(changes).toEqual({ inserts: [], updates: [], deletes: [{ table: 'tasks', id: 'a' }] });
+    const view = dayView(after, TODAY, MON_10_15);
+    expect(view.anytime.items.map((i) => i.title)).toEqual(['Keeper']);
+    expect(view.done.count).toBe(0);
+    expect(view.done.total).toBe(1);
+  });
+
+  it('does nothing for a Task that does not exist', () => {
+    expect(apply(aState(), { type: 'deleteTask', id: 'nope' }, MON_10_15).deletes).toEqual([]);
+  });
+});
+
 describe('unticking a Task', () => {
   const DONE_AT = '2026-11-16T09:40:00+01:00';
 

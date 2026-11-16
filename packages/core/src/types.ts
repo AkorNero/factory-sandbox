@@ -118,4 +118,6 @@ export type Command =
   | { type: 'tickTask'; id: string }
   | { type: 'untickTask'; id: string }
   /** Edit a done Task's Completion time to `time` ('HH:MM') on the day it already has. */
-  | { type: 'setCompletionTime'; id: string; time: TimeStr };
+  | { type: 'setCompletionTime'; id: string; time: TimeStr }
+  | { type: 'renameTask'; id: string; title: string }
+  | { type: 'deleteTask'; id: string };
