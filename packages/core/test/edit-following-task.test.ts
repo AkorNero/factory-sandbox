@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apply, dayView } from '../src/index.ts';
+import { apply, dayView, splitSeriesId } from '../src/index.ts';
 import { MON_10_15 } from './helpers.ts';
 import { DAYS, NOTHING, dailyTask, idOn, lineageOf, run, taskTitles } from './series-fixtures.ts';
 
@@ -116,6 +116,18 @@ describe('Rename an Occurrence of a Task', () => {
 
     expect(after.series).toHaveLength(1);
     expect(after.tasks.find((t) => t.id === 'one')?.title).toBe('Pay the rent');
+  });
+});
+
+describe('Two devices making the same This and following edit', () => {
+  it('write the same new segment and the same rows', () => {
+    const cmd = { type: 'renameTask', id: idOn('daily', '2026-11-18'), title: 'Water the ferns', scope: 'following' } as const;
+
+    const phone = run(dailyTask(), cmd);
+    const desktop = run(dailyTask(), cmd);
+
+    expect(phone.series.map((s) => s.id).sort()).toEqual(desktop.series.map((s) => s.id).sort());
+    expect(phone.series.map((s) => s.id)).toContain(splitSeriesId('daily', '2026-11-18'));
   });
 });
 

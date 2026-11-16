@@ -1,11 +1,12 @@
 import { applyChanges, mergeChanges } from './changes.ts';
-import { addDays } from './dates.ts';
+import { addDays, today } from './dates.ts';
 import { occurrenceSubtaskId, splitSeriesId } from './ids.ts';
-import type { Changes, Command, DateStr, EventRow, Now, SeriesRow, SeriesTemplate, State, TaskRow, Update } from './types.ts';
+import type { Changes, Command, EventRow, Now, SeriesRow, SeriesTemplate, State, TaskRow, Update } from './types.ts';
 import { noChanges } from './types.ts';
-import { addSubtask as addSubtaskRow, canAddSubtask, isDone } from './commands.ts';
+import { addSubtask as addSubtaskRow, canAddSubtask, dateTask, isDone, moveEvent, unplaceItemsOf } from './commands.ts';
 import { checkEventTimes, normaliseTime } from './event-input.ts';
-import { parseTemplate } from './series.ts';
+import { occurrenceDates } from './recurrence.ts';
+import { parseTemplate, ruleColumns } from './series.ts';
 
 /**
  * Editing a repeating Task or Event: the "This and following" scope, series splitting, Change schedule and Stop repeating.
@@ -111,7 +112,10 @@ export function editFollowing(state: State, cmd: FollowingCommand, now: Now): Ch
     case 'addSubtask':
       return occ.kind === 'task' ? addSubtask(state, l, occ.row, cmd, now) : undefined;
     case 'deleteTask':
-      return occ.kind === 'task' && occ.row.id !== cmd.id ? removeSubtask(state, l, occ.row, cmd.id, now) : undefined;
+      if (occ.kind !== 'task') return undefined;
+      return occ.row.id !== cmd.id ? removeSubtask(state, l, occ.row, cmd.id, now) : deleteFollowing(state, l, occ, now);
+    case 'deleteEvent':
+      return occ.kind === 'event' ? deleteFollowing(state, l, occ, now) : undefined;
     case 'renameEvent': {
       const title = cmd.title.trim();
       if (occ.kind !== 'event' || occ.row.id !== cmd.id) return undefined;
@@ -198,12 +202,100 @@ function removeSubtask(state: State, l: Lineage, opened: TaskRow, id: string, no
   return mergeChanges({ inserts: [], updates: [], deletes }, patchTemplates(state, l, patch, now));
 }
 
-export function changeSchedule(_state: State, _cmd: Extract<Command, { type: 'changeSchedule' }>, _now: Now): Changes {
-  return noChanges();
+/** The segments of the lineage that reach the day or beyond end the day before it. */
+function endSegments(l: Lineage, now: Now): Update[] {
+  return l.segments
+    .filter((s) => s.ends_on === null || s.ends_on >= l.from)
+    .map((s) => ({ table: 'series' as const, id: s.id, set: { ends_on: addDays(l.from, -1), updated_at: now } }));
 }
 
-export function stopRepeating(_state: State, _id: string, _now: Now): Changes {
-  return noChanges();
+/** Remove Task Occurrences for good, with their Sub-tasks. */
+const removeTasks = (state: State, rows: TaskRow[]): Changes => ({
+  inserts: [],
+  updates: [],
+  deletes: rows.flatMap((r) => [r, ...state.tasks.filter((t) => t.parent_id === r.id)]).map((t) => ({ table: 'tasks' as const, id: t.id })),
+});
+
+/** Remove Event Occurrences for good; the items placed in them become unplaced and keep their day. */
+const removeEvents = (state: State, rows: EventRow[], now: Now): Changes => ({
+  inserts: [],
+  updates: rows.flatMap((e) => unplaceItemsOf(state, e, now)),
+  deletes: rows.map((e) => ({ table: 'events' as const, id: e.id })),
+});
+
+/** Remove the later Occurrences of the lineage (history stays), not the opened one. */
+function removeLater(state: State, l: Lineage, occ: Occurrence, now: Now): Changes {
+  return occ.kind === 'task'
+    ? removeTasks(state, laterThan(state, l, occ.row))
+    : removeEvents(state, laterEvents(state, l).filter((e) => e.id !== occ.row.id), now);
 }
 
-export type { DateStr };
+/**
+ * Whether the Occurrence's schedule can be changed or stopped: it is an open Occurrence (not done, not Skipped) of a
+ * known series that has not passed. The menu offers "Change schedule" and "Stop repeating" on those.
+ */
+export function canEditSchedule(state: State, id: string, now: Now): boolean {
+  const occ = occurrenceOf(state, id);
+  if (!occ || occ.row.id !== id || !lineageOf(state, occ)) return false;
+  if (occ.kind === 'task') return !frozen(state, occ.row) && occ.row.date !== null && occ.row.date >= today(now);
+  return occ.row.date >= today(now);
+}
+
+export function changeSchedule(state: State, cmd: Extract<Command, { type: 'changeSchedule' }>, now: Now): Changes {
+  const columns = ruleColumns(cmd.recurrence);
+  if (!columns || state.series.some((s) => s.id === cmd.seriesId) || !canEditSchedule(state, cmd.id, now)) return noChanges();
+  const occ = occurrenceOf(state, cmd.id)!;
+  const l = lineageOf(state, occ)!;
+  const covering = l.segments.find((s) => s.starts_on <= l.from && (s.ends_on === null || s.ends_on >= l.from)) ?? l.own;
+  // like "Repeat…": the opened Occurrence is the first one of the new rule, on the first matching day from its own day
+  const own = occ.row.date!;
+  const draft: SeriesRow = {
+    id: cmd.seriesId,
+    lineage_id: l.id,
+    kind: covering.kind,
+    ...columns,
+    anchor_date: own,
+    starts_on: own,
+    ends_on: null,
+    template: covering.template,
+    created_at: now,
+    updated_at: now,
+  };
+  const first = occurrenceDates(draft, own, addDays(own, 800))[0];
+  if (!first) return noChanges();
+
+  const link = { series_id: cmd.seriesId, occurrence_date: first, updated_at: now };
+  const move: Update[] = [];
+  if (occ.kind === 'task') {
+    if (occ.row.date !== first) move.push(...dateTask(state, occ.row.id, first, now).updates);
+    move.push({ table: 'tasks', id: occ.row.id, set: link });
+  } else {
+    if (occ.row.date !== first) move.push(...moveEvent(state, occ.row.id, first, now).updates);
+    move.push({ table: 'events', id: occ.row.id, set: link });
+  }
+  return mergeChanges(
+    { inserts: [{ table: 'series', row: { ...draft, starts_on: first } }], updates: [...endSegments(l, now), ...move], deletes: [] },
+    removeLater(state, l, occ, now),
+  );
+}
+
+export function stopRepeating(state: State, id: string, now: Now): Changes {
+  if (!canEditSchedule(state, id, now)) return noChanges();
+  const occ = occurrenceOf(state, id)!;
+  const l = lineageOf(state, occ)!;
+  const unlink = { series_id: null, occurrence_date: null, updated_at: now };
+  const updates: Update[] = [{ table: occ.kind === 'task' ? 'tasks' : 'events', id, set: unlink }];
+  if (occ.kind === 'task') {
+    for (const s of state.tasks) {
+      if (s.parent_id === id && s.series_subtask_key !== null) updates.push({ table: 'tasks', id: s.id, set: { series_subtask_key: null, updated_at: now } });
+    }
+  }
+  return mergeChanges({ inserts: [], updates: [...endSegments(l, now), ...updates], deletes: [] }, removeLater(state, l, occ, now));
+}
+
+/** "Delete" with "This and following": the opened Occurrence and every later one go, and the series ends before them. */
+function deleteFollowing(state: State, l: Lineage, occ: Occurrence, now: Now): Changes {
+  const removal =
+    occ.kind === 'task' ? removeTasks(state, laterTasks(state, l, occ.row.id)) : removeEvents(state, laterEvents(state, l), now);
+  return mergeChanges({ inserts: [], updates: endSegments(l, now), deletes: [] }, removal);
+}
