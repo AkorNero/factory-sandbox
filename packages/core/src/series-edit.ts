@@ -1,9 +1,9 @@
-import { mergeChanges } from './changes.ts';
+import { applyChanges, mergeChanges } from './changes.ts';
 import { addDays } from './dates.ts';
-import { splitSeriesId } from './ids.ts';
+import { occurrenceSubtaskId, splitSeriesId } from './ids.ts';
 import type { Changes, Command, DateStr, EventRow, Now, SeriesRow, SeriesTemplate, State, TaskRow, Update } from './types.ts';
 import { noChanges } from './types.ts';
-import { isDone } from './commands.ts';
+import { addSubtask as addSubtaskRow, canAddSubtask, isDone } from './commands.ts';
 import { checkEventTimes, normaliseTime } from './event-input.ts';
 import { parseTemplate } from './series.ts';
 
@@ -102,11 +102,16 @@ export function editFollowing(state: State, cmd: FollowingCommand, now: Now): Ch
   switch (cmd.type) {
     case 'renameTask': {
       const title = cmd.title.trim();
-      if (occ.kind !== 'task' || occ.row.id !== cmd.id) return undefined;
+      if (occ.kind !== 'task') return undefined;
+      if (occ.row.id !== cmd.id) return renameSubtask(state, l, occ.row, cmd.id, title, now);
       if (!title || title === occ.row.title) return noChanges();
       const updates = laterTasks(state, l, occ.row.id).filter((t) => t.title !== title).map((t) => updateRow('tasks', t.id, { title }, now));
       return mergeChanges({ inserts: [], updates, deletes: [] }, patchTemplates(state, l, (t) => ({ ...t, title }), now));
     }
+    case 'addSubtask':
+      return occ.kind === 'task' ? addSubtask(state, l, occ.row, cmd, now) : undefined;
+    case 'deleteTask':
+      return occ.kind === 'task' && occ.row.id !== cmd.id ? removeSubtask(state, l, occ.row, cmd.id, now) : undefined;
     case 'renameEvent': {
       const title = cmd.title.trim();
       if (occ.kind !== 'event' || occ.row.id !== cmd.id) return undefined;
@@ -135,6 +140,62 @@ export function editFollowing(state: State, cmd: FollowingCommand, now: Now): Ch
     default:
       return undefined;
   }
+}
+
+/** The later Task Occurrences, without the opened one, in the order they are on screen. */
+const laterThan = (state: State, l: Lineage, opened: TaskRow) => laterTasks(state, l, opened.id).filter((t) => t.id !== opened.id);
+
+const subOf = (state: State, parentId: string, key: string) => state.tasks.find((t) => t.parent_id === parentId && t.series_subtask_key === key);
+
+/**
+ * "+ Sub-task" with "This and following": the opened Occurrence gets it, so does every later open one that does not have
+ * it yet, and the series template, so Occurrences made later bring it. All of them share one key.
+ */
+function addSubtask(state: State, l: Lineage, opened: TaskRow, cmd: Extract<Command, { type: 'addSubtask' }>, now: Now): Changes | undefined {
+  const title = cmd.title.trim();
+  if (!title || !canAddSubtask(state, opened.id)) return undefined;
+  const key = cmd.id;
+  let current = state;
+  const parts: Changes[] = [];
+  const add = (id: string, parentId: string) => {
+    const made = addSubtaskRow(current, { type: 'addSubtask', id, parentId, title }, now);
+    for (const ins of made.inserts) if (ins.table === 'tasks') ins.row.series_subtask_key = key;
+    current = applyChanges(current, made);
+    parts.push(made);
+  };
+  add(cmd.id, opened.id);
+  for (const t of laterThan(state, l, opened)) if (!subOf(state, t.id, key)) add(occurrenceSubtaskId(t.id, key), t.id);
+  parts.push(patchTemplates(state, l, (t) => ({ ...t, subtasks: [...(t.subtasks ?? []).filter((x) => x.key !== key), { key, title }] }), now));
+  return mergeChanges(...parts);
+}
+
+/** Renaming a Sub-task with "This and following": the same Sub-task (same key) in later open Occurrences, unless ticked. */
+function renameSubtask(state: State, l: Lineage, opened: TaskRow, id: string, title: string, now: Now): Changes | undefined {
+  const own = state.tasks.find((t) => t.id === id);
+  if (!own?.series_subtask_key) return undefined;
+  const key = own.series_subtask_key;
+  if (!title || title === own.title) return noChanges();
+  const updates = [updateRow('tasks', own.id, { title }, now)];
+  for (const t of laterThan(state, l, opened)) {
+    const s = subOf(state, t.id, key);
+    if (s && !s.deleted_at && !s.completed_at && s.title !== title) updates.push(updateRow('tasks', s.id, { title }, now));
+  }
+  const patch = (t: SeriesTemplate): SeriesTemplate => ({ ...t, subtasks: (t.subtasks ?? []).map((x) => (x.key === key ? { ...x, title } : x)) });
+  return mergeChanges({ inserts: [], updates, deletes: [] }, patchTemplates(state, l, patch, now));
+}
+
+/** Removing a Sub-task with "This and following": the same Sub-task (same key) in later open Occurrences, unless ticked. */
+function removeSubtask(state: State, l: Lineage, opened: TaskRow, id: string, now: Now): Changes | undefined {
+  const own = state.tasks.find((t) => t.id === id);
+  if (!own?.series_subtask_key) return undefined;
+  const key = own.series_subtask_key;
+  const deletes = [{ table: 'tasks' as const, id: own.id }];
+  for (const t of laterThan(state, l, opened)) {
+    const s = subOf(state, t.id, key);
+    if (s && !s.completed_at) deletes.push({ table: 'tasks', id: s.id });
+  }
+  const patch = (t: SeriesTemplate): SeriesTemplate => ({ ...t, subtasks: (t.subtasks ?? []).filter((x) => x.key !== key) });
+  return mergeChanges({ inserts: [], updates: [], deletes }, patchTemplates(state, l, patch, now));
 }
 
 export function changeSchedule(_state: State, _cmd: Extract<Command, { type: 'changeSchedule' }>, _now: Now): Changes {
