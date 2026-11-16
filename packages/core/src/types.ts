@@ -117,6 +117,8 @@ export type Command =
       /** Adds the Task already placed in this Event; it then takes the Event's day. */
       eventId?: string;
     }
+  /** Add a Sub-task to a Task. A Sub-task never has Sub-tasks, and has no day of its own. */
+  | { type: 'addSubtask'; id: string; parentId: string; title: string }
   | { type: 'addEvent'; id: string; title: string; date: DateStr; start: TimeStr; end: TimeStr }
   | { type: 'renameEvent'; id: string; title: string }
   | { type: 'setEventTimes'; id: string; start: TimeStr; end: TimeStr }

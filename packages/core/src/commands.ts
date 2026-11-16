@@ -7,6 +7,8 @@ export function apply(state: State, command: Command, now: Now): Changes {
   switch (command.type) {
     case 'addTask':
       return addTask(state, command, now);
+    case 'addSubtask':
+      return addSubtask(state, command, now);
     case 'addEvent':
       return addEvent(command, now);
     case 'renameEvent':
@@ -43,7 +45,7 @@ function addTask(state: State, cmd: Extract<Command, { type: 'addTask' }>, now: 
   if (!title) return noChanges();
   const event = cmd.eventId ? findEvent(state, cmd.eventId) : undefined;
   if (cmd.eventId && !event) return noChanges();
-  const position = Math.max(0, ...state.tasks.map((t) => t.position)) + 1;
+  const position = nextPosition(state);
   const row: TaskRow = {
     id: cmd.id,
     parent_id: null,
@@ -62,6 +64,40 @@ function addTask(state: State, cmd: Extract<Command, { type: 'addTask' }>, now: 
     updated_at: now,
   };
   return { inserts: [{ table: 'tasks', row }], updates: [], deletes: [] };
+}
+
+const nextPosition = (state: State) => Math.max(0, ...state.tasks.map((t) => t.position)) + 1;
+
+function addSubtask(state: State, cmd: Extract<Command, { type: 'addSubtask' }>, now: Now): Changes {
+  const title = cmd.title.trim();
+  const parent = liveTask(state, cmd.parentId);
+  if (!title || !parent || parent.parent_id) return noChanges();
+  const row: TaskRow = {
+    id: cmd.id,
+    parent_id: parent.id,
+    title,
+    date: null,
+    // the first Sub-task takes over its parent's Placement
+    event_id: hasSubtasks(state, parent.id) ? null : parent.event_id,
+    completed_at: null,
+    skipped_at: null,
+    carried_over: false,
+    position: nextPosition(state),
+    series_id: null,
+    occurrence_date: null,
+    series_subtask_key: null,
+    deleted_at: null,
+    created_at: now,
+    updated_at: now,
+  };
+  const first = !hasSubtasks(state, parent.id);
+  // a parent has no Placement and no Completion time of its own: the first Sub-task takes over the Placement,
+  // and adding one to a done Task reopens it
+  const set: Record<string, unknown> = {};
+  if (first && parent.event_id) set.event_id = null;
+  if (parent.completed_at) set.completed_at = null;
+  const updates = Object.keys(set).length ? updateTask(parent.id, { ...set, updated_at: now }).updates : [];
+  return { inserts: [{ table: 'tasks', row }], updates, deletes: [] };
 }
 
 function addEvent(cmd: Extract<Command, { type: 'addEvent' }>, now: Now): Changes {
@@ -140,6 +176,8 @@ function moveEvent(state: State, id: string, date: DateStr, now: Now): Changes {
   return { inserts: [], updates: [...updateEvent(id, { date }, now).updates, ...tasks], deletes: [] };
 }
 
+const hasSubtasks = (state: State, id: string) => state.tasks.some((t) => t.parent_id === id && !t.deleted_at);
+
 function liveTask(state: State, id: string): TaskRow | undefined {
   return state.tasks.find((t) => t.id === id && !t.deleted_at);
 }
@@ -155,7 +193,7 @@ function updateTask(id: string, set: Record<string, unknown>): Changes {
 export function canPlace(state: State, id: string, eventId: string): boolean {
   const task = liveTask(state, id);
   if (!task || !findEvent(state, eventId) || task.event_id === eventId) return false;
-  return !state.tasks.some((t) => t.parent_id === id && !t.deleted_at);
+  return !hasSubtasks(state, id);
 }
 
 /** A Task takes the Event's day; a Sub-task keeps its own and follows the Event through its Placement. */

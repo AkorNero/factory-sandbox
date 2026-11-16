@@ -5,6 +5,9 @@ export interface ItemView {
   id: string;
   title: string;
   parentTitle: string | null;
+  parentId: string | null;
+  /** For a Task with Sub-tasks: how many are done, out of how many. null for any other item. */
+  subtasks: { done: number; total: number } | null;
   carriedOver: boolean;
   recurring: boolean;
   /** A Task with no date: it is in Someday. */
@@ -166,10 +169,16 @@ export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateS
   const effectiveDay = (t: TaskRow): DateStr | null =>
     placedIn(t)?.date ?? (t.parent_id ? (byId.get(t.parent_id)?.date ?? null) : t.date);
 
+  const subtasksOf = (id: string) => live.filter((t) => t.parent_id === id);
+  /** A Task with Sub-tasks is done exactly when all of them are; nothing is stored on it. */
+  const isDone = (t: TaskRow) => (subtasksOf(t.id).length ? subtasksOf(t.id).every((s) => s.completed_at) : !!t.completed_at);
+
   const toItem = (t: TaskRow): ItemView => ({
     id: t.id,
     title: t.title,
     parentTitle: t.parent_id ? (byId.get(t.parent_id)?.title ?? null) : null,
+    parentId: t.parent_id,
+    subtasks: subtasksOf(t.id).length ? { done: subtasksOf(t.id).filter((s) => s.completed_at).length, total: subtasksOf(t.id).length } : null,
     carriedOver: t.carried_over,
     recurring: t.series_id !== null,
     someday: t.parent_id === null && t.date === null,
@@ -190,7 +199,9 @@ export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateS
       .sort((a, b) => (a.completed_at! < b.completed_at! ? 1 : -1))
       .map(toItem);
 
-  const dayTasks = live.filter((t) => effectiveDay(t) === date);
+  /** A Task with Sub-tasks is never listed on a day itself: its Sub-tasks are. */
+  const hasSubtasks = new Set(live.filter((t) => t.parent_id).map((t) => t.parent_id));
+  const dayTasks = live.filter((t) => !hasSubtasks.has(t.id) && effectiveDay(t) === date);
   const open = dayTasks.filter((t) => !t.completed_at && !t.skipped_at);
   const anytime = open
     .filter((t) => !placedIn(t))
@@ -198,7 +209,7 @@ export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateS
   const done = dayTasks
     .filter((t) => t.completed_at)
     .sort((a, b) => (a.completed_at! < b.completed_at! ? 1 : -1));
-  const someday = live.filter((t) => t.parent_id === null && t.date === null && !t.completed_at).sort((a, b) => a.position - b.position);
+  const someday = live.filter((t) => t.parent_id === null && t.date === null && !isDone(t)).sort((a, b) => a.position - b.position);
 
   const start = today(now);
   const picked = [...new Set(pickedDays.filter((d) => canPickDay(now, d)))].sort();
@@ -207,7 +218,7 @@ export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateS
     return {
       date: d,
       events: state.events.filter((e) => !e.deleted_at && e.date === d).length,
-      tasks: live.filter((t) => effectiveDay(t) === d && !t.completed_at && !t.skipped_at).length,
+      tasks: live.filter((t) => !hasSubtasks.has(t.id) && effectiveDay(t) === d && !t.completed_at && !t.skipped_at).length,
     };
   });
 
