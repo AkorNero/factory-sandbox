@@ -63,6 +63,22 @@ export interface SeriesRow {
   updated_at: string;
 }
 
+/** What the "Repeat…" picker produces: one of the three rules. Weekdays are ISO numbered, 1 = Monday ... 7 = Sunday. */
+export type RecurrenceRule =
+  | { rule: 'every_n_days'; interval: number }
+  | { rule: 'weekdays'; weekdays: number[]; /** every N weeks, 1 when left out */ everyWeeks?: number }
+  | { rule: 'day_of_month'; day: number };
+
+/** What a series stores (as JSON text in `template`) to make each Occurrence from. */
+export interface SeriesTemplate {
+  title: string;
+  /** Event series only. */
+  start?: TimeStr;
+  end?: TimeStr;
+  /** Task series only: each Sub-task with a key that stays the same through edits. */
+  subtasks?: { key: string; title: string }[];
+}
+
 export interface RoutineRow {
   id: string;
   name: string;
@@ -141,4 +157,12 @@ export type Command =
   /** Edit a done Task's Completion time to `time` ('HH:MM') on the day it already has. */
   | { type: 'setCompletionTime'; id: string; time: TimeStr }
   | { type: 'renameTask'; id: string; title: string }
-  | { type: 'deleteTask'; id: string };
+  | { type: 'deleteTask'; id: string }
+  /**
+   * Set a Recurrence on a Task or Event (not a Sub-task, a done Task, or one that already recurs). The item becomes
+   * the first Occurrence, on the first matching day from its own day (from today for a Someday Task, which is then dated).
+   * `seriesId` is made by the caller.
+   */
+  | { type: 'setRecurrence'; id: string; seriesId: string; recurrence: RecurrenceRule }
+  /** Make the Occurrences that fall on these days and do not exist yet. The UI asks for the days it is about to show. */
+  | { type: 'materialise'; dates: DateStr[] };

@@ -2,6 +2,7 @@ import { checkEventTimes, normaliseTime } from './event-input.ts';
 import { dateOf } from './dates.ts';
 import type { Changes, Command, DateStr, EventRow, Now, State, TaskRow } from './types.ts';
 import { noChanges } from './types.ts';
+import { materialise, setRecurrence } from './series.ts';
 
 /** Run one command against the current state. Pure: returns the changed rows, never mutates `state`. */
 export function apply(state: State, command: Command, now: Now): Changes {
@@ -37,7 +38,11 @@ export function apply(state: State, command: Command, now: Now): Changes {
     case 'renameTask':
       return renameTask(state, command.id, command.title, now);
     case 'deleteTask':
-      return deleteTask(state, command.id);
+      return deleteTask(state, command.id, now);
+    case 'setRecurrence':
+      return setRecurrence(state, command, now);
+    case 'materialise':
+      return materialise(state, command.dates, now);
   }
 }
 
@@ -67,7 +72,7 @@ function addTask(state: State, cmd: Extract<Command, { type: 'addTask' }>, now: 
   return { inserts: [{ table: 'tasks', row }], updates: [], deletes: [] };
 }
 
-const nextPosition = (state: State) => Math.max(0, ...state.tasks.map((t) => t.position)) + 1;
+export const nextPosition = (state: State) => Math.max(0, ...state.tasks.map((t) => t.position)) + 1;
 
 /** Whether a Sub-task can be added to the Task: it exists and is not a Sub-task itself (Sub-tasks never have Sub-tasks). */
 export function canAddSubtask(state: State, id: string): boolean {
@@ -125,7 +130,7 @@ function addEvent(cmd: Extract<Command, { type: 'addEvent' }>, now: Now): Change
   return { inserts: [{ table: 'events', row }], updates: [], deletes: [] };
 }
 
-const findEvent = (state: State, id: string) => state.events.find((e) => e.id === id && !e.deleted_at);
+export const findEvent = (state: State, id: string) => state.events.find((e) => e.id === id && !e.deleted_at);
 
 function updateEvent(id: string, set: Record<string, unknown>, now: Now): Changes {
   if (Object.keys(set).length === 0) return noChanges();
@@ -162,6 +167,8 @@ function deleteEvent(state: State, cmd: Extract<Command, { type: 'deleteEvent' }
       // a Sub-task has no day of its own: it follows its parent
       set: { event_id: null, ...(t.parent_id || t.date === event.date ? {} : { date: event.date }), updated_at: now },
     }));
+  // an Occurrence is kept, marked deleted, so no device makes it again; a one-off Event is removed
+  if (event.series_id) return { inserts: [], updates: [...updates, ...updateEvent(event.id, { deleted_at: now }, now).updates], deletes: [] };
   return { inserts: [], updates, deletes: [{ table: 'events', id: cmd.id }] };
 }
 
@@ -175,7 +182,7 @@ export function canMoveEvent(state: State, id: string, date: DateStr): boolean {
  * The Event takes the new day and its placed Tasks come along: they keep their Placement and, like any placed
  * Task, take the Event's day. A placed Sub-task has no day of its own, so it stays as it is.
  */
-function moveEvent(state: State, id: string, date: DateStr, now: Now): Changes {
+export function moveEvent(state: State, id: string, date: DateStr, now: Now): Changes {
   if (!canMoveEvent(state, id, date)) return noChanges();
   const tasks = state.tasks
     .filter((t) => t.event_id === id && !t.deleted_at && !t.parent_id && t.date !== date)
@@ -183,15 +190,15 @@ function moveEvent(state: State, id: string, date: DateStr, now: Now): Changes {
   return { inserts: [], updates: [...updateEvent(id, { date }, now).updates, ...tasks], deletes: [] };
 }
 
-const subtasksOf = (state: State, id: string) => state.tasks.filter((t) => t.parent_id === id && !t.deleted_at);
+export const subtasksOf = (state: State, id: string) => state.tasks.filter((t) => t.parent_id === id && !t.deleted_at);
 /** A Task with Sub-tasks is done exactly when all of them are; any other Task when it has a Completion time. */
 const isDone = (state: State, task: TaskRow) => {
   const subs = subtasksOf(state, task.id);
   return subs.length ? subs.every((s) => s.completed_at) : !!task.completed_at;
 };
-const hasSubtasks = (state: State, id: string) => subtasksOf(state, id).length > 0;
+export const hasSubtasks = (state: State, id: string) => subtasksOf(state, id).length > 0;
 
-function liveTask(state: State, id: string): TaskRow | undefined {
+export function liveTask(state: State, id: string): TaskRow | undefined {
   return state.tasks.find((t) => t.id === id && !t.deleted_at);
 }
 
@@ -261,7 +268,7 @@ const placedOpenSubtasks = (state: State, id: string) => subtasksOf(state, id).f
  * The Task takes the day and loses its Placement, so it is in Anytime on that day. A parent brings its open Sub-tasks
  * along: their Placements are cleared, so they follow it. Done Sub-tasks keep theirs.
  */
-function dateTask(state: State, id: string, date: DateStr, now: Now): Changes {
+export function dateTask(state: State, id: string, date: DateStr, now: Now): Changes {
   if (!canDateTask(state, id, date)) return noChanges();
   const task = liveTask(state, id)!;
   const set: Record<string, unknown> = {};
@@ -324,11 +331,19 @@ function renameTask(state: State, id: string, title: string, now: Now): Changes 
   return updateTask(id, { title: trimmed, updated_at: now });
 }
 
-/** A one-off Task is hard-deleted, and its Sub-tasks with it. */
-function deleteTask(state: State, id: string): Changes {
-  if (!liveTask(state, id)) return noChanges();
-  const subs = subtasksOf(state, id).map((s) => ({ table: 'tasks' as const, id: s.id }));
-  return { inserts: [], updates: [], deletes: [{ table: 'tasks', id }, ...subs] };
+/**
+ * A one-off Task is hard-deleted, and its Sub-tasks with it. An Occurrence is kept, marked deleted (with its Sub-tasks),
+ * so it leaves no trace on screen but no device makes it again.
+ */
+function deleteTask(state: State, id: string, now: Now): Changes {
+  const task = liveTask(state, id);
+  if (!task) return noChanges();
+  const subs = subtasksOf(state, id);
+  if (task.series_id) {
+    const updates = [task, ...subs].flatMap((t) => updateTask(t.id, { deleted_at: now, updated_at: now }).updates);
+    return { inserts: [], updates, deletes: [] };
+  }
+  return { inserts: [], updates: [], deletes: [{ table: 'tasks', id }, ...subs.map((s) => ({ table: 'tasks' as const, id: s.id }))] };
 }
 
 /** Apply changed rows to a state snapshot (used by tests, and by anything that wants the result in memory). */

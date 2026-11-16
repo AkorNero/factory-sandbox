@@ -6,3 +6,5 @@ export { addDays, dateOf, formatDuration, minutesOf, timeOf, today } from './dat
 export { SCHEMA, type ColumnType } from './schema.ts';
 export { checkEventTimes, parseEventInput, type ParsedEvent } from './event-input.ts';
 export { occurrenceDates, weekdaysOf } from './recurrence.ts';
+export { occurrenceId, occurrenceSubtaskId } from './ids.ts';
+export { materialise } from './series.ts';
