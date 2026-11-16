@@ -173,7 +173,10 @@ function addSubtask(state: State, l: Lineage, opened: TaskRow, cmd: Extract<Comm
   return mergeChanges(...parts);
 }
 
-/** Renaming a Sub-task with "This and following": the same Sub-task (same key) in later open Occurrences, unless ticked. */
+/**
+ * Renaming a Sub-task with "This and following": the same Sub-task (same key) in later open Occurrences, ticked or not.
+ * Occurrences that are past, done or Skipped are not among them, so history is never rewritten.
+ */
 function renameSubtask(state: State, l: Lineage, opened: TaskRow, id: string, title: string, now: Now): Changes | undefined {
   const own = state.tasks.find((t) => t.id === id);
   if (!own?.series_subtask_key) return undefined;
@@ -182,7 +185,7 @@ function renameSubtask(state: State, l: Lineage, opened: TaskRow, id: string, ti
   const updates = [updateRow('tasks', own.id, { title }, now)];
   for (const t of laterThan(state, l, opened)) {
     const s = subOf(state, t.id, key);
-    if (s && !s.deleted_at && !s.completed_at && s.title !== title) updates.push(updateRow('tasks', s.id, { title }, now));
+    if (s && !s.deleted_at && s.title !== title) updates.push(updateRow('tasks', s.id, { title }, now));
   }
   const patch = (t: SeriesTemplate): SeriesTemplate => ({ ...t, subtasks: (t.subtasks ?? []).map((x) => (x.key === key ? { ...x, title } : x)) });
   return mergeChanges({ inserts: [], updates, deletes: [] }, patchTemplates(state, l, patch, now));

@@ -84,15 +84,24 @@ describe('Rename a Sub-task of an Occurrence', () => {
     expect(subsOn(after, '2026-11-19')).toEqual(['Hoover', 'Bins']);
   });
 
-  it('"This and following" renames the same Sub-task in later Occurrences, never a ticked one', () => {
-    let state = run(chores(), { type: 'tickTask', id: sub('2026-11-20', 'k1') });
+  it('"This and following" renames the same Sub-task in later open Occurrences, also where it is ticked', () => {
+    let state = run(chores(), { type: 'tickTask', id: sub('2026-11-20', 'k1') }); // the 20th is still open: Bins is not ticked
     state = run(state, { type: 'renameTask', id: sub('2026-11-18', 'k1'), title: 'Vacuum', scope: 'following' });
 
     expect(subsOn(state, '2026-11-17')).toEqual(['Hoover', 'Bins']);
     expect(subsOn(state, '2026-11-18')).toEqual(['Vacuum', 'Bins']);
     expect(subsOn(state, '2026-11-19')).toEqual(['Vacuum', 'Bins']);
-    expect(subsOn(state, '2026-11-20')).toEqual(['Hoover', 'Bins']);
+    expect(subsOn(state, '2026-11-20')).toEqual(['Vacuum', 'Bins']);
+    expect(state.tasks.find((t) => t.id === sub('2026-11-20', 'k1'))?.completed_at).not.toBeNull(); // still ticked
     expect(templateSubs(state)).toEqual([['Hoover', 'Bins'], ['Vacuum', 'Bins']]);
+  });
+
+  it('"This and following" leaves the Sub-tasks of a done Occurrence alone', () => {
+    let state = run(chores(), { type: 'tickTask', id: parent('2026-11-20') }); // ticks both Sub-tasks: the Occurrence is done
+    state = run(state, { type: 'renameTask', id: sub('2026-11-18', 'k1'), title: 'Vacuum', scope: 'following' });
+
+    expect(subsOn(state, '2026-11-19')).toEqual(['Vacuum', 'Bins']);
+    expect(subsOn(state, '2026-11-20')).toEqual(['Hoover', 'Bins']);
   });
 
   it('keeps a Sub-task title that was changed by hand on another Sub-task', () => {
