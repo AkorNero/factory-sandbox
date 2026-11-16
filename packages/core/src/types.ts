@@ -107,10 +107,15 @@ export interface Changes {
 export const noChanges = (): Changes => ({ inserts: [], updates: [], deletes: [] });
 
 /** Commands in. Ids are made by the caller (UUIDs), which keeps the core pure. */
-export type Command = {
-  type: 'addTask';
-  id: string;
-  title: string;
-  /** null adds a Someday Task. */
-  date: DateStr | null;
-};
+export type Command =
+  | {
+      type: 'addTask';
+      id: string;
+      title: string;
+      /** null adds a Someday Task. */
+      date: DateStr | null;
+    }
+  | { type: 'addEvent'; id: string; title: string; date: DateStr; start: TimeStr; end: TimeStr }
+  | { type: 'renameEvent'; id: string; title: string }
+  | { type: 'setEventTimes'; id: string; start: TimeStr; end: TimeStr }
+  | { type: 'deleteEvent'; id: string };
