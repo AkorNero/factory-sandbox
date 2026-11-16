@@ -1,11 +1,15 @@
 <!doctype html>
 <!--
   PROTOTYPE — throwaway. Answers wayfinder ticket "What should Today + Upcoming look and feel like?"
-  Three structurally different variants of the Today + Upcoming screen, switchable via ?variant=A|B|C
-  and the floating bar (← / → keys too). Open the file in a browser; no build, no persistence.
+  Round 1 had three structurally different variants (?variant=A|B|C). C (Now / Next) won.
+  Round 2 cycles C1–C3: same top (date strip, Now, Next, Anytime), three takes on Later today / Earlier today / Someday.
+  A and B are still reachable via ?variant=A|B. Open the file in a browser; no build, no persistence; ?t=HH:MM sets the clock.
   A: Timeline   — hour grid with Event blocks, unplaced Tasks in an "Anytime" tray, Upcoming as a side column
   B: Checklist  — one list of Tasks, Events are section headers, Upcoming in a slide-out drawer
-  C: Now / Next — focus card for the current Event, rest of day compressed, Upcoming as a day strip on top
+  C: Now / Next — focus card(s) for the live Event(s), rest of day compressed, Upcoming as a day strip on top
+     C1 Rail  — Earlier folds above Now; Later is a time rail with free gaps; Someday in a bottom sheet
+     C2 Tabs  — Later / Done / Someday as one segmented list
+     C3 Cards — Later as a sideways card row; Done as a meter + chips; Someday is the last chip in the date strip
   The dev bar also fakes the clock (+1h, ⏭ midnight to see Carry-over and Skipped) and toggles a phone-width frame.
 -->
 <html lang="en">
@@ -29,7 +33,7 @@
   .item{display:flex;gap:8px;align-items:flex-start;padding:4px 0}
   .item .tick{flex:none;width:18px;height:18px;border:1.5px solid var(--mute);border-radius:5px;background:none;padding:0;margin-top:1px;display:grid;place-items:center;font-size:12px;line-height:1}
   .item.done .tick{background:var(--ok);border-color:var(--ok);color:#fff}
-  .item.done .label{text-decoration:line-through;color:var(--mute)}
+  .item.done .label{color:var(--mute)}
   .item.skipped .label{text-decoration:line-through;color:var(--ghost)}
   .item.ghost{color:var(--ghost);font-style:italic}
   .item.parent .tick{border-style:dashed;cursor:default}
@@ -114,13 +118,46 @@
   .c-later .r .tm{font-variant-numeric:tabular-nums;color:var(--mute);min-width:48px}
   .c-pills{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 14px}
   .c-pill{display:flex;gap:6px;align-items:center;border:1px solid var(--line);background:var(--card);border-radius:20px;padding:5px 12px 5px 6px;font-size:14px}
-  .c-pill.done{opacity:.55;text-decoration:line-through}
+  .c-pill.done{opacity:.6}
   .c-pill .tick{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--mute);background:none;padding:0;font-size:11px}
   .c-pill.done .tick{background:var(--ok);border-color:var(--ok);color:#fff}
   .c-pill.carry{border-color:var(--warn)}
   .c-sec{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:10px 0 4px}
   .c-other{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
 
+
+
+  .c-r{display:flex;gap:10px;padding:4px 0} .c-r .tm{color:var(--mute);min-width:42px;font-variant-numeric:tabular-nums}
+  .someday-chip{border-style:dashed} .someday-chip .dots{font-size:10px;letter-spacing:0}
+  /* C1 rail */
+  .rail{position:relative;margin:4px 0 14px 4px}
+  .rail::before{content:"";position:absolute;left:55px;top:6px;bottom:6px;width:2px;background:var(--line)}
+  .rail-row{display:flex;gap:12px;align-items:flex-start;padding:5px 0;position:relative}
+  .rail-row .tm{min-width:44px;font-variant-numeric:tabular-nums;color:var(--mute);font-size:13.5px;padding-top:1px}
+  .rail-row .dot{flex:none;width:14px;height:14px;border-radius:50%;background:var(--card);border:2px solid var(--accent);margin-top:3px;z-index:1;font-size:9px;display:grid;place-items:center;color:#fff}
+  .rail-row .dot.ok{background:var(--ok);border-color:var(--ok)}
+  .rail-row.past{color:var(--mute)} .rail-row.past .dot:not(.ok){border-color:var(--mute)}
+  .rail-gap{margin-left:70px;font-size:12px;color:var(--ok);padding:3px 0}
+  .rail-fold{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px dashed var(--line);padding:6px 0;margin-bottom:10px;font-size:13.5px}
+  .footer-link{display:block;margin:8px auto 0;background:none;border:1px dashed var(--line);border-radius:20px;padding:6px 16px;color:var(--mute)}
+  .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:30}
+  .sheet{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:min(640px,100vw);background:var(--card);border-radius:18px 18px 0 0;padding:10px 18px 90px;z-index:31;box-shadow:0 -8px 30px rgba(0,0,0,.2)}
+  .sheet .grab{width:40px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 10px}
+  /* C2 tabs */
+  .seg{display:flex;background:var(--line);border-radius:12px;padding:3px;gap:3px;margin:4px 0 10px}
+  .seg button{flex:1;border:0;background:none;border-radius:9px;padding:7px 4px;font-size:14px;color:var(--mute)}
+  .seg button.on{background:var(--card);color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+  .seg .n{font-size:11.5px;color:var(--mute);font-weight:400}
+  .tab-body{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:6px 14px;min-height:120px}
+  .tab-row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+  .tab-row:last-child{border-bottom:0}
+  .tab-row .rel{font-size:12.5px;color:var(--accent);white-space:nowrap}
+  .tab-group{font-size:12px;font-weight:600;color:var(--mute);margin-top:8px}
+  /* C3 cards */
+  .lcards{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px}
+  .lcard{flex:none;width:150px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+  .lcard .tm{font-size:12px;color:var(--accent);font-weight:600} .lcard .ti{font-weight:600;margin:2px 0}
+  .meter{height:8px;background:var(--line);border-radius:4px;overflow:hidden} .meter i{display:block;height:100%;background:var(--ok)}
   /* ---------- Switcher / dev bar (not part of the design) ---------- */
   #pbar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:50;display:flex;gap:4px;align-items:center;background:#111;color:#fff;border-radius:30px;padding:6px 8px;box-shadow:0 6px 24px rgba(0,0,0,.35);font:13px system-ui;white-space:nowrap;max-width:96vw;overflow-x:auto}
   #pbar button{background:#2a2a2e;border:0;color:#fff;border-radius:20px;padding:5px 10px}
@@ -262,7 +299,7 @@ function doneNote(t) {
   if (!t.done || subsOf(t.id).length) return '';
   const placed = t.eventId && evById(t.eventId), covers = placed && placed.start <= t.done && t.done < placed.end;
   const e = covers ? placed : eventAt(t.date, t.done); // overlap: prefer the Event it was placed in
-  return `<div class="ctx">done ${hm(t.done)}${e ? ' · in ' + esc(e.title) : ''}</div>`;
+  return `<div class="ctx">${hm(t.done)}${e ? ' · ' + esc(e.title) : ''}</div>`;
 }
 function item(t, { ctx = '', showDone = true } = {}) {
   const subs = subsOf(t.id);
@@ -289,7 +326,7 @@ function dayRows(d, cls) {
   const rows = [];
   eventsOn(d).forEach(e => rows.push({ k: e.start, h: `<div class="${cls}"><span class="tm">${hm(e.start)}</span><span>${esc(e.title)}${e.recurId ? ' ↻' : ''}${placedIn(e.id).length ? ` <span class="mute small">· ${placedIn(e.id).length} placed</span>` : ''}</span></div>` }));
   topTasksOn(d).forEach(t => rows.push({ k: 2000, h: `<div class="${cls}"><span class="tm">○</span><span>${esc(t.title)}${badges(t)}</span></div>` }));
-  ghostsOn(d).forEach(r => rows.push({ k: 2001, h: `<div class="${cls} ghost"><span class="tm">○</span><span>↻ ${esc(r.title)}</span></div>` }));
+  ghostsOn(d).forEach(r => rows.push({ k: 2001, h: `<div class="${cls}"><span class="tm">○</span><span>${esc(r.title)} <span class="badge recur">↻ ${ruleText(r.rule)}</span></span></div>` }));
   return rows.sort((a, b) => a.k - b.k).map(r => r.h).join('') || `<div class="mute small" style="padding-left:10px">nothing</div>`;
 }
 const openDayInput = () => `<div class="small mute" style="margin-top:10px">Open another day: <input type="date" data-act="openday" min="${dateOf(S.day).toISOString().slice(0, 10)}"></div>${S.extraDay !== null ? `<div style="margin-top:6px"><b>${fmtDay(S.extraDay)}</b>${dayRows(S.extraDay, 'row')}</div>` : ''}`;
@@ -344,47 +381,100 @@ function VariantB() {
   return html;
 }
 
-/* ===================== Variant C: Now / Next ===================== */
-function VariantC() {
-  const d = S.day;
+/* ===================== Variant C: Now / Next, with three takes on Later / Earlier / Someday ===================== */
+const dur = m => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ' ' + (m % 60) + 'm' : ''}` : `${m}m`;
+function cStrip(d, withSomeday) {
   const days = [d, ...upcomingDays()];
-  const strip = `<div class="c-strip">${days.map(x => {
+  return `<div class="c-strip">${days.map(x => {
     const n = eventsOn(x).length, t = topTasksOn(x).filter(isOpen).length + ghostsOn(x).length;
     return `<button class="c-chip ${x === S.selDay ? 'sel' : ''}" data-sel="${x}"><div class="w">${x === d ? 'Today' : fmtDay(x, { weekday: 'short' })}</div><div class="n">${dateOf(x).getDate()}</div><div class="dots">${'▪'.repeat(Math.min(n, 4))}${'•'.repeat(Math.min(t, 4))}</div></button>`;
-  }).join('')}<span style="align-self:center" class="small mute">▪ Event • Task</span></div>`;
-  if (S.selDay !== d) {
-    return `<div class="c-main">${strip}<div class="c-other"><h2 style="margin-bottom:6px">${fmtDay(S.selDay, { weekday: 'long', day: 'numeric', month: 'long' })}</h2>${dayRows(S.selDay, 'r').replace(/class="r"/g, 'class="r" style="display:flex;gap:10px;padding:4px 0"').replace(/class="r ghost"/g, 'class="r ghost" style="display:flex;gap:10px;padding:4px 0;color:var(--ghost);font-style:italic"')}${openDayInput()}</div></div>`;
-  }
+  }).join('')}${withSomeday ? `<button class="c-chip someday-chip ${S.selDay === 'S' ? 'sel' : ''}" data-sel="S"><div class="w">Someday</div><div class="n">${someday().length}</div><div class="dots">no date</div></button>` : ''}<span style="align-self:center" class="small mute">▪ Event • Task</span></div>`;
+}
+function cOtherDay(d) {
+  return `<div class="c-other"><h2 style="margin-bottom:6px">${fmtDay(d, { weekday: 'long', day: 'numeric', month: 'long' })}</h2>${dayRows(d, 'c-r')}${openDayInput()}</div>`;
+}
+function cTop(d) {
   const evs = eventsOn(d);
   const live = evs.filter(e => e.start <= S.time && S.time < e.end).sort((a, b) => b.start - a.start); // latest started first
   const nextAt = evs.find(e => e.start > S.time)?.start;
   const nexts = evs.filter(e => e.start === nextAt); // Events starting together all count as Next
-  const later = evs.filter(e => e.start > S.time && !nexts.includes(e));
-  const doneEv = evs.filter(e => e.end <= S.time);
-  let html = `<div class="c-main">${strip}${banner()}`;
+  let html = '';
   if (live.length) {
     const card = (now, i) => {
       const pct = Math.round(100 * (S.time - now.start) / (now.end - now.start));
       return `<div class="c-now ${i ? 'also' : ''}"><div class="lbl">${i ? 'Also now' : 'Now'} · ${hm(now.start)}–${hm(now.end)} · ${now.end - S.time} min left</div><h2>${esc(now.title)}${now.recurId ? ' ↻' : ''}</h2><div class="bar"><i style="width:${pct}%"></i></div>${placedIn(now.id).map(t => item(t, { ctx: parentCtx(t), showDone: false })).join('') || '<div style="opacity:.8">Nothing placed</div>'}</div>`;
     };
-    html += live.length > 1
-      ? `<div class="c-sec">${live.length} Events at once</div><div class="c-live">${live.map(card).join('')}</div>`
-      : card(live[0], 0);
+    html += live.length > 1 ? `<div class="c-sec">${live.length} Events at once</div><div class="c-live">${live.map(card).join('')}</div>` : card(live[0], 0);
   } else html += `<div class="c-now" style="background:var(--card);color:var(--ink);border:1px solid var(--line)"><div class="lbl">Now</div><h2>Free</h2><div class="mute">No Event right now — pick something from Anytime.</div></div>`;
-  if (nexts.length) html += `<div class="c-next"><div class="lbl">Next · ${hm(nextAt)} (in ${nextAt - S.time} min)</div>${nexts.map(next => `<h3 style="margin:2px 0 4px">${esc(next.title)}</h3>${placedIn(next.id).map(t => item(t, { ctx: parentCtx(t) })).join('')}`).join('')}</div>`;
+  if (nexts.length) html += `<div class="c-next"><div class="lbl">Next · ${hm(nextAt)} (in ${dur(nextAt - S.time)})</div>${nexts.map(next => `<h3 style="margin:2px 0 4px">${esc(next.title)}</h3>${placedIn(next.id).map(t => item(t, { ctx: parentCtx(t) })).join('')}`).join('')}</div>`;
   const anytime = unplacedOn(d).flatMap(t => subsOf(t.id).length ? subsOf(t.id).filter(s => !s.eventId).map(s => ({ t: s, ctx: S.tasks.find(p => p.id === s.parentId).title })) : [{ t }]);
   html += `<div class="c-sec">Anytime today</div><div class="c-pills">${anytime.map(({ t, ctx }) => `<span class="c-pill ${t.done ? 'done' : ''} ${t.carried && isOpen(t) ? 'carry' : ''}"><button class="tick" data-tick="${t.id}">${t.done ? '✓' : ''}</button>${esc(t.title)}${ctx ? ` <span class="ctx">· ${esc(ctx)}</span>` : ''}${t.recurId ? ' <span class="badge recur">↻</span>' : ''}${t.carried && isOpen(t) ? ` <span class="badge carry">↪${t.carried}d</span>` : ''}</span>`).join('')}</div>`;
-  if (later.length) html += `<div class="c-sec">Later today</div><div class="c-later">${later.map(e => `<div class="r"><span class="tm">${hm(e.start)}</span><span>${esc(e.title)}${e.recurId ? ' ↻' : ''} ${placedIn(e.id).length ? `<span class="mute small">· ${placedIn(e.id).map(t => esc(t.title)).join(', ')}</span>` : ''}</span></div>`).join('')}</div>`;
-  const doneTasks = S.tasks.filter(t => t.date === d && t.done && !subsOf(t.id).length);
-  html += `<details class="someday"><summary>Earlier today: ${doneEv.length} Events, ${doneTasks.length} done</summary>${doneEv.map(e => `<div class="small mute">${hm(e.start)} ${esc(e.title)}</div>`).join('')}${doneTasks.map(t => item(t, { ctx: parentCtx(t) })).join('')}</details>${somedayBlock()}</div>`;
-  return html;
+  return { html, nexts, later: evs.filter(e => e.start > S.time && !nexts.includes(e)), past: evs.filter(e => e.end <= S.time) };
+}
+const doneToday = d => S.tasks.filter(t => t.date === d && t.done && !subsOf(t.id).length).sort((a, b) => a.done - b.done);
+const doneWhere = t => { const p = t.eventId && evById(t.eventId); return p && p.start <= t.done && t.done < p.end ? p : eventAt(t.date, t.done); };
+const placedNames = e => placedIn(e.id).map(t => esc(t.title)).join(', ');
+
+/* C1 Rail: one chronological line. Earlier folds above Now, Later continues below as a rail with free gaps; Someday is a bottom sheet. */
+function VariantC1() {
+  const d = S.day;
+  if (S.selDay !== d) return `<div class="c-main">${cStrip(d)}${cOtherDay(S.selDay)}</div>`;
+  const { html: top, nexts, later, past } = cTop(d);
+  const done = doneToday(d);
+  const log = [...past.map(e => ({ k: e.start, h: `<div class="rail-row past"><span class="tm">${hm(e.start)}</span><span class="dot"></span><span><b>${esc(e.title)}</b> <span class="mute small">${dur(e.end - e.start)}</span></span></div>` })),
+               ...done.map(t => ({ k: t.done, h: `<div class="rail-row past"><span class="tm">${hm(t.done)}</span><span class="dot ok">✓</span><span>${esc(t.title)}${doneWhere(t) ? ` <span class="mute small">· ${esc(doneWhere(t).title)}</span>` : ''}</span></div>` }))].sort((a, b) => a.k - b.k);
+  const earlier = `<button class="rail-fold" data-act="fold">${S.fold ? '▾' : '▸'} Earlier today <span class="mute">· ${past.length} Events · ${done.length} done</span></button>${S.fold ? `<div class="rail">${log.map(x => x.h).join('')}</div>` : ''}`;
+  let rail = '', cursor = Math.max(S.time, ...eventsOn(d).filter(e => e.start <= S.time || nexts.includes(e)).map(e => e.end)); // gaps start after Now and Next
+  later.forEach(e => {
+    if (e.start - cursor >= 30) rail += `<div class="rail-gap">free ${dur(e.start - cursor)}</div>`;
+    rail += `<div class="rail-row"><span class="tm">${hm(e.start)}</span><span class="dot"></span><span><b>${esc(e.title)}</b>${e.recurId ? ' ↻' : ''} <span class="mute small">${dur(e.end - e.start)}</span>${placedIn(e.id).length ? `<div class="small mute">${placedNames(e)}</div>` : ''}</span></div>`;
+    cursor = Math.max(cursor, e.end);
+  });
+  if (cursor < 23 * 60) rail += `<div class="rail-gap">free until midnight</div>`;
+  const sheet = S.sheet ? `<div class="sheet-bg" data-act="sheet"></div><div class="sheet"><div class="grab"></div><h3>Someday</h3><div class="mute small" style="margin-bottom:6px">Tasks with no date</div>${someday().map(t => item(t)).join('')}</div>` : '';
+  return `<div class="c-main">${cStrip(d)}${banner()}${earlier}${top}<div class="c-sec">Later today</div><div class="rail">${rail || '<div class="mute small">nothing else today</div>'}</div><button class="footer-link" data-act="sheet">Someday · ${someday().length} ›</button>${sheet}</div>`;
+}
+
+/* C2 Tabs: one segmented control below Anytime, one list at a time. */
+function VariantC2() {
+  const d = S.day;
+  if (S.selDay !== d) return `<div class="c-main">${cStrip(d)}${cOtherDay(S.selDay)}</div>`;
+  const { html: top, later, past } = cTop(d);
+  const done = doneToday(d), tab = S.cTab || 'later';
+  const tabs = [['later', 'Later today', later.length], ['done', 'Done', done.length], ['someday', 'Someday', someday().length]];
+  let body = '';
+  if (tab === 'later') body = later.map(e => `<div class="tab-row"><div><b>${esc(e.title)}</b>${e.recurId ? ' ↻' : ''}<div class="small mute">${hm(e.start)}–${hm(e.end)}${placedIn(e.id).length ? ' · ' + placedNames(e) : ''}</div></div><span class="rel">in ${dur(e.start - S.time)}</span></div>`).join('') || '<div class="mute small">nothing else today</div>';
+  if (tab === 'done') {
+    const groups = new Map();
+    done.forEach(t => { const e = doneWhere(t); const k = e ? `${hm(e.start)} ${e.title}` : 'Outside any Event'; groups.set(k, [...(groups.get(k) || []), t]); });
+    body = [...groups].map(([k, ts]) => `<div class="tab-group">${esc(k)}</div>${ts.map(t => item(t, { ctx: parentCtx(t) })).join('')}`).join('') || '<div class="mute small">nothing done yet</div>';
+    if (past.length) body += `<div class="small mute" style="margin-top:8px">Events over: ${past.map(e => esc(e.title)).join(', ')}</div>`;
+  }
+  if (tab === 'someday') body = someday().map(t => item(t)).join('');
+  return `<div class="c-main">${cStrip(d)}${banner()}${top}<div class="seg">${tabs.map(([k, l, n]) => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${l} <span class="n">${n}</span></button>`).join('')}</div><div class="tab-body">${body}</div></div>`;
+}
+
+/* C3 Cards: Later today as a sideways card row (echoing the date strip), Done as a progress meter + chips, Someday as the last chip in the date strip. */
+function VariantC3() {
+  const d = S.day;
+  if (S.selDay === 'S') return `<div class="c-main">${cStrip(d, true)}<div class="c-other"><h2>Someday</h2><div class="mute small" style="margin-bottom:6px">Tasks with no date</div>${someday().map(t => item(t)).join('')}</div></div>`;
+  if (S.selDay !== d) return `<div class="c-main">${cStrip(d, true)}${cOtherDay(S.selDay)}</div>`;
+  const { html: top, later } = cTop(d);
+  const done = doneToday(d), total = S.tasks.filter(t => t.date === d && !subsOf(t.id).length && !t.skipped).length;
+  const cards = later.map(e => `<div class="lcard"><div class="tm">${hm(e.start)}</div><div class="ti">${esc(e.title)}${e.recurId ? ' ↻' : ''}</div><div class="small mute">${dur(e.end - e.start)}</div>${placedIn(e.id).map(t => `<div class="small">○ ${esc(t.title)}</div>`).join('')}</div>`).join('');
+  return `<div class="c-main">${cStrip(d, true)}${banner()}${top}
+    ${later.length ? `<div class="c-sec">Later today</div><div class="lcards">${cards}</div>` : ''}
+    <div class="c-sec">Done today</div><div class="meter"><i style="width:${total ? Math.round(100 * done.length / total) : 0}%"></i></div><div class="small mute" style="margin:4px 0 8px">${done.length} of ${total} done</div>
+    <div class="c-pills">${done.map(t => `<span class="c-pill done"><button class="tick" data-tick="${t.id}">✓</button>${esc(t.title)} <span class="ctx">${hm(t.done)}${doneWhere(t) ? ' · ' + esc(doneWhere(t).title) : ''}</span></span>`).join('')}</div></div>`;
 }
 
 /* ===================== switcher + wiring ===================== */
-const VARIANTS = { A: ['Timeline', VariantA], B: ['Checklist', VariantB], C: ['Now / Next', VariantC] };
-const KEYS = Object.keys(VARIANTS);
+// Round 2: C won. C1–C3 differ only below Anytime (Later / Earlier / Someday). A and B stay reachable via ?variant=A|B but are out of the cycle.
+const VARIANTS = { C1: ['Rail', VariantC1], C2: ['Tabs', VariantC2], C3: ['Cards', VariantC3], A: ['Timeline', VariantA], B: ['Checklist', VariantB] };
+const KEYS = ['C1', 'C2', 'C3'];
 let cur = new URLSearchParams(location.search).get('variant');
-if (!KEYS.includes(cur)) cur = 'A';
+if (cur === 'C') cur = 'C1';
+if (!VARIANTS[cur]) cur = 'C1';
 function setVariant(v) { cur = v; const u = new URL(location); u.searchParams.set('variant', v); history.replaceState(null, '', u); render(); }
 function render() {
   document.getElementById('app').innerHTML = VARIANTS[cur][1]();
@@ -399,9 +489,10 @@ function render() {
 }
 document.addEventListener('click', e => {
   const tk = e.target.closest('[data-tick]'); if (tk) { tick(tk.dataset.tick); return render(); }
-  const sel = e.target.closest('[data-sel]'); if (sel) { S.selDay = +sel.dataset.sel; return render(); }
+  const sel = e.target.closest('[data-sel]'); if (sel) { S.selDay = sel.dataset.sel === 'S' ? 'S' : +sel.dataset.sel; return render(); }
+  const tb = e.target.closest('[data-tab]'); if (tb) { S.cTab = tb.dataset.tab; return render(); }
   const a = e.target.closest('[data-act]'); if (!a) return;
-  const act = a.dataset.act, i = KEYS.indexOf(cur);
+  const act = a.dataset.act, i = Math.max(0, KEYS.indexOf(cur));
   if (act === 'prev') setVariant(KEYS[(i - 1 + KEYS.length) % KEYS.length]);
   else if (act === 'next') setVariant(KEYS[(i + 1) % KEYS.length]);
   else if (act === 'back') { S.time = Math.max(S.time - 15, 0); render(); }
@@ -411,6 +502,8 @@ document.addEventListener('click', e => {
   else if (act === 'state') document.getElementById('pstate').classList.toggle('open');
   else if (act === 'reset') { reset(); render(); }
   else if (act === 'dismiss') { S.banner = null; render(); }
+  else if (act === 'fold') { S.fold = !S.fold; render(); }
+  else if (act === 'sheet') { S.sheet = !S.sheet; render(); }
   else if (act === 'up') { S.upOpen = !S.upOpen; render(); }
 });
 document.addEventListener('input', e => { if (e.target.id === 'slider') { S.time = +e.target.value; render(); } });
