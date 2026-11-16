@@ -1,4 +1,4 @@
-import { dayView, today, type DayView, type ItemView, type StripDay } from '@dayplanner/core';
+import { dayView, today, type Command, type DayView, type ItemView, type StripDay } from '@dayplanner/core';
 import { useStatus } from '@powersync/react';
 import type { AbstractPowerSyncDatabase } from '@powersync/web';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
@@ -17,6 +17,11 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
   const date = today(now);
   const view = useMemo(() => (state ? dayView(state, date, now) : null), [state, date, now]);
 
+  const [menuId, setMenuId] = useState<string | null>(null);
+  const menuItem = view && menuId ? [...view.anytime.items, ...view.done.items].find((i) => i.id === menuId) : undefined;
+  const run = (command: Command) => runCommand(db, command, clock.now());
+  const tick = (item: ItemView) => run({ type: item.completedTime ? 'untickTask' : 'tickTask', id: item.id });
+
   return (
     <main className="main">
       <header className="top">
@@ -26,8 +31,14 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
       {view && (
         <>
           <Strip days={view.strip} selected={view.date} />
-          <Anytime view={view} onAdd={(title) => runCommand(db, { type: 'addTask', id: crypto.randomUUID(), title, date }, clock.now())} />
-          <DoneToday view={view} />
+          <Anytime
+            view={view}
+            onAdd={(title) => run({ type: 'addTask', id: crypto.randomUUID(), title, date })}
+            onTick={tick}
+            onOpen={setMenuId}
+          />
+          <DoneToday view={view} onTick={tick} onOpen={setMenuId} />
+          {menuItem && <TaskMenu item={menuItem} onClose={() => setMenuId(null)} run={run} />}
         </>
       )}
     </main>
@@ -61,34 +72,65 @@ function Strip({ days, selected }: { days: StripDay[]; selected: string }) {
   );
 }
 
-const COLLAPSED = 6;
+const ANYTIME_SHOWN = 6;
+const DONE_SHOWN = 4;
 
-function Anytime({ view, onAdd }: { view: DayView; onAdd: (title: string) => Promise<unknown> }) {
+interface ItemActions {
+  onTick: (item: ItemView) => void;
+  onOpen: (id: string) => void;
+}
+
+/** One pill: the round tick toggles done, the label opens the tap menu. */
+function Pill({ item, onTick, onOpen }: { item: ItemView } & ItemActions) {
+  const isDone = item.completedTime !== null;
+  return (
+    <li className={`pill ${item.carriedOver ? 'carried' : ''} ${isDone ? 'done' : ''}`}>
+      <button
+        type="button"
+        className={`tick ${isDone ? 'on' : ''}`}
+        aria-label={`${isDone ? 'Untick' : 'Tick off'} ${label(item)}`}
+        onClick={() => onTick(item)}
+      >
+        {isDone && '✓'}
+      </button>
+      <button type="button" className="label" aria-haspopup="dialog" onClick={() => onOpen(item.id)}>
+        {label(item)}
+      </button>
+      {item.carriedOver && <span className="badge warn">↪</span>}
+      {item.recurring && <span className="badge">↻</span>}
+      {item.completedTime && <small className="mute">{item.completedTime}</small>}
+    </li>
+  );
+}
+
+/** Pills that collapse to `limit` with a "+N more" / "Show less" button. */
+function Collapsible({ items, limit, ...actions }: { items: ItemView[]; limit: number } & ItemActions) {
   const [all, setAll] = useState(false);
-  const shown = all ? view.anytime.items : view.anytime.items.slice(0, COLLAPSED);
-  const more = view.anytime.items.length - COLLAPSED;
+  const shown = all ? items : items.slice(0, limit);
+  const more = items.length - limit;
+  return (
+    <ul className="pills">
+      {shown.map((i) => (
+        <Pill key={i.id} item={i} {...actions} />
+      ))}
+      {more > 0 && (
+        <li>
+          <button type="button" className="pill dashed more" onClick={() => setAll(!all)}>
+            {all ? 'Show less' : `+${more} more`}
+          </button>
+        </li>
+      )}
+    </ul>
+  );
+}
+
+function Anytime({ view, onAdd, ...actions }: { view: DayView; onAdd: (title: string) => Promise<unknown> } & ItemActions) {
   return (
     <section aria-labelledby="anytime-h">
       <h2 id="anytime-h" className="sec">
         Anytime today <span className="count" data-testid="anytime-count">{view.anytime.count}</span>
       </h2>
-      <ul className="pills">
-        {shown.map((i) => (
-          <li key={i.id} className={`pill ${i.carriedOver ? 'carried' : ''}`}>
-            <span className="tick" />
-            <span>{label(i)}</span>
-            {i.carriedOver && <span className="badge warn">↪</span>}
-            {i.recurring && <span className="badge">↻</span>}
-          </li>
-        ))}
-        {more > 0 && (
-          <li>
-            <button type="button" className="pill dashed more" onClick={() => setAll(!all)}>
-              {all ? 'Show less' : `+${more} more`}
-            </button>
-          </li>
-        )}
-      </ul>
+      <Collapsible items={view.anytime.items} limit={ANYTIME_SHOWN} {...actions} />
       <AddField placeholder="+ Task today" onAdd={onAdd} />
     </section>
   );
@@ -112,7 +154,7 @@ function AddField({ placeholder, onAdd }: { placeholder: string; onAdd: (title: 
   );
 }
 
-function DoneToday({ view }: { view: DayView }) {
+function DoneToday({ view, ...actions }: { view: DayView } & ItemActions) {
   const { count, total, items } = view.done;
   if (total === 0) return null;
   return (
@@ -126,15 +168,45 @@ function DoneToday({ view }: { view: DayView }) {
       <p className="mute">
         {count} of {total} done
       </p>
-      <ul className="pills">
-        {items.map((i) => (
-          <li key={i.id} className="pill done">
-            <span className="tick on">✓</span>
-            <span>{label(i)}</span>
-            {i.completedTime && <small className="mute">{i.completedTime}</small>}
-          </li>
-        ))}
-      </ul>
+      <Collapsible items={items} limit={DONE_SHOWN} {...actions} />
     </section>
+  );
+}
+
+/** Tap menu (bottom sheet): rename, edit the Completion time of a done item, delete. */
+function TaskMenu({ item, onClose, run }: { item: ItemView; onClose: () => void; run: (c: Command) => Promise<unknown> }) {
+  const [title, setTitle] = useState(item.title);
+  const [time, setTime] = useState(item.completedTime ?? '');
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    await run({ type: 'renameTask', id: item.id, title });
+    if (item.completedTime && time) await run({ type: 'setCompletionTime', id: item.id, time });
+    onClose();
+  };
+  const remove = async () => {
+    await run({ type: 'deleteTask', id: item.id });
+    onClose();
+  };
+  return (
+    <div className="backdrop" onClick={onClose}>
+      <form className="sheet" role="dialog" aria-label="Edit task" onClick={(e) => e.stopPropagation()} onSubmit={save}>
+        <div className="grab" />
+        <label>
+          Title
+          <input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+        </label>
+        {item.completedTime && (
+          <label>
+            Completion time
+            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+          </label>
+        )}
+        <div className="actions">
+          <button type="submit" className="primary">Save</button>
+          <button type="button" onClick={onClose}>Cancel</button>
+          <button type="button" className="danger" onClick={remove}>Delete</button>
+        </div>
+      </form>
+    </div>
   );
 }

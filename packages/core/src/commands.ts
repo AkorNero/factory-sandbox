@@ -6,6 +6,16 @@ export function apply(state: State, command: Command, now: Now): Changes {
   switch (command.type) {
     case 'addTask':
       return addTask(state, command, now);
+    case 'tickTask':
+      return tickTask(state, command.id, now);
+    case 'untickTask':
+      return untickTask(state, command.id, now);
+    case 'setCompletionTime':
+      return setCompletionTime(state, command.id, command.time, now);
+    case 'renameTask':
+      return renameTask(state, command.id, command.title, now);
+    case 'deleteTask':
+      return deleteTask(state, command.id);
   }
 }
 
@@ -31,6 +41,52 @@ function addTask(state: State, cmd: Extract<Command, { type: 'addTask' }>, now: 
     updated_at: now,
   };
   return { inserts: [{ table: 'tasks', row }], updates: [], deletes: [] };
+}
+
+function liveTask(state: State, id: string): TaskRow | undefined {
+  return state.tasks.find((t) => t.id === id && !t.deleted_at);
+}
+
+function updateTask(id: string, set: Record<string, unknown>): Changes {
+  return { inserts: [], updates: [{ table: 'tasks', id, set }], deletes: [] };
+}
+
+/** Ticking records the Completion time. A Task that is already done keeps the time it has. */
+function tickTask(state: State, id: string, now: Now): Changes {
+  const task = liveTask(state, id);
+  if (!task || task.completed_at) return noChanges();
+  return updateTask(id, { completed_at: now, updated_at: now });
+}
+
+/** Unticking clears the Completion time. */
+function untickTask(state: State, id: string, now: Now): Changes {
+  const task = liveTask(state, id);
+  if (!task || !task.completed_at) return noChanges();
+  return updateTask(id, { completed_at: null, updated_at: now });
+}
+
+const CLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Editing keeps the Completion time's date and UTC offset; only the clock time changes. */
+function setCompletionTime(state: State, id: string, time: string, now: Now): Changes {
+  const task = liveTask(state, id);
+  if (!task?.completed_at || !CLOCK_TIME.test(time)) return noChanges();
+  const completed = `${task.completed_at.slice(0, 11)}${time}:00${task.completed_at.slice(19)}`;
+  if (completed === task.completed_at) return noChanges();
+  return updateTask(id, { completed_at: completed, updated_at: now });
+}
+
+function renameTask(state: State, id: string, title: string, now: Now): Changes {
+  const task = liveTask(state, id);
+  const trimmed = title.trim();
+  if (!task || !trimmed || trimmed === task.title) return noChanges();
+  return updateTask(id, { title: trimmed, updated_at: now });
+}
+
+/** A one-off Task is hard-deleted. */
+function deleteTask(state: State, id: string): Changes {
+  if (!liveTask(state, id)) return noChanges();
+  return { inserts: [], updates: [], deletes: [{ table: 'tasks', id }] };
 }
 
 /** Apply changed rows to a state snapshot (used by tests, and by anything that wants the result in memory). */
