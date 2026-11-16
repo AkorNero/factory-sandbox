@@ -2,7 +2,8 @@
 <!--
   PROTOTYPE — throwaway. Answers wayfinder ticket "What should Today + Upcoming look and feel like?"
   Round 1 had three structurally different variants (?variant=A|B|C). C (Now / Next) won.
-  Round 2 cycles C1–C3: same top (date strip, Now, Next, Anytime), three takes on Later today / Earlier today / Someday.
+  Round 3 cycles C4/C5: C2's tabs (Later today / Earlier today / Someday) + C3's Done meter, Done above or below the tabs.
+  Round 2 (C1–C3, via ?variant=): same top (date strip, Now, Next, Anytime), three takes on Later today / Earlier today / Someday.
   A and B are still reachable via ?variant=A|B. Open the file in a browser; no build, no persistence; ?t=HH:MM sets the clock.
   A: Timeline   — hour grid with Event blocks, unplaced Tasks in an "Anytime" tray, Upcoming as a side column
   B: Checklist  — one list of Tasks, Events are section headers, Upcoming in a slide-out drawer
@@ -152,6 +153,7 @@
   .tab-row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
   .tab-row:last-child{border-bottom:0}
   .tab-row .rel{font-size:12.5px;color:var(--accent);white-space:nowrap}
+  .tab-row.past b{color:var(--mute)} .tab-row .rel.ok{color:var(--ok)} .tab-row .rel.warn{color:var(--warn)}
   .tab-group{font-size:12px;font-weight:600;color:var(--mute);margin-top:8px}
   /* C3 cards */
   .lcards{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px}
@@ -468,13 +470,36 @@ function VariantC3() {
     <div class="c-pills">${done.map(t => `<span class="c-pill done"><button class="tick" data-tick="${t.id}">✓</button>${esc(t.title)} <span class="ctx">${hm(t.done)}${doneWhere(t) ? ' · ' + esc(doneWhere(t).title) : ''}</span></span>`).join('')}</div></div>`;
 }
 
+/* C4 / C5 (round 3 mix): C2's tabs with Done swapped for "Earlier today" (finished Events), plus C3's Done meter + chips as its own section.
+   C4 puts Done above the tabs, C5 below them. */
+function cMix(doneFirst) {
+  const d = S.day;
+  if (S.selDay !== d) return `<div class="c-main">${cStrip(d)}${cOtherDay(S.selDay)}</div>`;
+  const { html: top, later, past } = cTop(d);
+  const done = doneToday(d), total = S.tasks.filter(t => t.date === d && !subsOf(t.id).length && !t.skipped).length;
+  const tab = ['later', 'earlier', 'someday'].includes(S.cTab) ? S.cTab : 'later';
+  const tabs = [['later', 'Later today', later.length], ['earlier', 'Earlier today', past.length], ['someday', 'Someday', someday().length]];
+  let body = '';
+  if (tab === 'later') body = later.map(e => `<div class="tab-row"><div><b>${esc(e.title)}</b>${e.recurId ? ' ↻' : ''}<div class="small mute">${hm(e.start)}–${hm(e.end)}${placedIn(e.id).length ? ' · ' + placedNames(e) : ''}</div></div><span class="rel">in ${dur(e.start - S.time)}</span></div>`).join('') || '<div class="mute small" style="padding:8px 0">nothing else today</div>';
+  if (tab === 'earlier') body = [...past].reverse().map(e => {
+    const its = placedIn(e.id), got = its.filter(t => t.done).length, inside = done.filter(t => doneWhere(t) === e);
+    return `<div class="tab-row past"><div><b>${esc(e.title)}</b>${e.recurId ? ' ↻' : ''}<div class="small mute">${hm(e.start)}–${hm(e.end)} · ${dur(e.end - e.start)}${inside.length ? ' · ' + inside.map(t => esc(t.title)).join(', ') : ''}</div></div><span class="rel ${its.length && got < its.length ? 'warn' : 'ok'}">${its.length ? `${got}/${its.length} done` : `ended ${dur(S.time - e.end)} ago`}</span></div>`;
+  }).join('') || '<div class="mute small" style="padding:8px 0">no Events finished yet</div>';
+  if (tab === 'someday') body = someday().map(t => item(t)).join('');
+  const doneSec = `<div class="c-sec">Done today</div><div class="meter"><i style="width:${total ? Math.round(100 * done.length / total) : 0}%"></i></div><div class="small mute" style="margin:4px 0 8px">${done.length} of ${total} done</div>
+    <div class="c-pills">${done.map(t => `<span class="c-pill done"><button class="tick" data-tick="${t.id}">✓</button>${esc(t.title)} <span class="ctx">${hm(t.done)}${doneWhere(t) ? ' · ' + esc(doneWhere(t).title) : ''}</span></span>`).join('') || '<span class="mute small">nothing yet</span>'}</div>`;
+  const tabsHtml = `<div class="seg">${tabs.map(([k, l, n]) => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${l} <span class="n">${n}</span></button>`).join('')}</div><div class="tab-body">${body}</div>`;
+  return `<div class="c-main">${cStrip(d)}${banner()}${top}${doneFirst ? doneSec + tabsHtml : tabsHtml + '<div style="height:6px"></div>' + doneSec}</div>`;
+}
+const VariantC4 = () => cMix(true), VariantC5 = () => cMix(false);
+
 /* ===================== switcher + wiring ===================== */
 // Round 2: C won. C1–C3 differ only below Anytime (Later / Earlier / Someday). A and B stay reachable via ?variant=A|B but are out of the cycle.
-const VARIANTS = { C1: ['Rail', VariantC1], C2: ['Tabs', VariantC2], C3: ['Cards', VariantC3], A: ['Timeline', VariantA], B: ['Checklist', VariantB] };
-const KEYS = ['C1', 'C2', 'C3'];
+const VARIANTS = { C4: ['Done above', VariantC4], C5: ['Done below', VariantC5], C1: ['Rail', VariantC1], C2: ['Tabs', VariantC2], C3: ['Cards', VariantC3], A: ['Timeline', VariantA], B: ['Checklist', VariantB] };
+const KEYS = ['C4', 'C5']; // round 3; C1–C3 still open via ?variant=
 let cur = new URLSearchParams(location.search).get('variant');
 if (cur === 'C') cur = 'C1';
-if (!VARIANTS[cur]) cur = 'C1';
+if (!VARIANTS[cur]) cur = 'C4';
 function setVariant(v) { cur = v; const u = new URL(location); u.searchParams.set('variant', v); history.replaceState(null, '', u); render(); }
 function render() {
   document.getElementById('app').innerHTML = VARIANTS[cur][1]();
@@ -521,6 +546,7 @@ document.addEventListener('keydown', e => {
 reset();
 const tq = new URLSearchParams(location.search).get('t'); // e.g. ?t=17:20 to open at a given time
 if (tq) { const [h, m] = tq.split(':').map(Number); S.time = h * 60 + (m || 0); }
+S.cTab = new URLSearchParams(location.search).get('tab') || undefined; // ?tab=later|earlier|someday
 render();
 </script>
 </body>
