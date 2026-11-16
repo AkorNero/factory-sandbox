@@ -121,6 +121,8 @@ export type Command =
   | { type: 'renameEvent'; id: string; title: string }
   | { type: 'setEventTimes'; id: string; start: TimeStr; end: TimeStr }
   | { type: 'deleteEvent'; id: string }
+  /** Move an Event to another day; the Tasks placed in it come along, still placed. */
+  | { type: 'moveEvent'; id: string; date: DateStr }
   /** Place a Task or Sub-task into an Event (a Task takes the Event's day). */
   | { type: 'placeTask'; id: string; eventId: string }
   /** Take it out of its Event, keeping its day. */

@@ -15,6 +15,8 @@ export function apply(state: State, command: Command, now: Now): Changes {
       return setEventTimes(state, command, now);
     case 'deleteEvent':
       return deleteEvent(state, command, now);
+    case 'moveEvent':
+      return moveEvent(state, command.id, command.date, now);
     case 'placeTask':
       return placeTask(state, command.id, command.eventId, now);
     case 'unplaceTask':
@@ -116,6 +118,24 @@ function deleteEvent(state: State, cmd: Extract<Command, { type: 'deleteEvent' }
       set: { event_id: null, ...(t.parent_id || t.date === event.date ? {} : { date: event.date }), updated_at: now },
     }));
   return { inserts: [], updates, deletes: [{ table: 'events', id: cmd.id }] };
+}
+
+/** Whether a drop of the Event onto the day is allowed: it exists and is on another day. */
+export function canMoveEvent(state: State, id: string, date: DateStr): boolean {
+  const event = findEvent(state, id);
+  return !!event && event.date !== date;
+}
+
+/**
+ * The Event takes the new day and its placed Tasks come along: they keep their Placement and, like any placed
+ * Task, take the Event's day. A placed Sub-task has no day of its own, so it stays as it is.
+ */
+function moveEvent(state: State, id: string, date: DateStr, now: Now): Changes {
+  if (!canMoveEvent(state, id, date)) return noChanges();
+  const tasks = state.tasks
+    .filter((t) => t.event_id === id && !t.deleted_at && !t.parent_id && t.date !== date)
+    .map((t) => ({ table: 'tasks' as const, id: t.id, set: { date, updated_at: now } }));
+  return { inserts: [], updates: [...updateEvent(id, { date }, now).updates, ...tasks], deletes: [] };
 }
 
 function liveTask(state: State, id: string): TaskRow | undefined {
