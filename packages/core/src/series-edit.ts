@@ -188,18 +188,22 @@ function renameSubtask(state: State, l: Lineage, opened: TaskRow, id: string, ti
   return mergeChanges({ inserts: [], updates, deletes: [] }, patchTemplates(state, l, patch, now));
 }
 
-/** Removing a Sub-task with "This and following": the same Sub-task (same key) in later open Occurrences, unless ticked. */
+/**
+ * Removing a Sub-task with "This and following": the same Sub-task (same key) in later open Occurrences, unless ticked.
+ * They are marked deleted, not removed: their ids are fixed by Occurrence and key, so a device that has not seen the
+ * template change would otherwise make them again.
+ */
 function removeSubtask(state: State, l: Lineage, opened: TaskRow, id: string, now: Now): Changes | undefined {
   const own = state.tasks.find((t) => t.id === id);
   if (!own?.series_subtask_key) return undefined;
   const key = own.series_subtask_key;
-  const deletes = [{ table: 'tasks' as const, id: own.id }];
+  const updates = [updateRow('tasks', own.id, { deleted_at: now }, now)];
   for (const t of laterThan(state, l, opened)) {
     const s = subOf(state, t.id, key);
-    if (s && !s.completed_at) deletes.push({ table: 'tasks', id: s.id });
+    if (s && !s.deleted_at && !s.completed_at) updates.push(updateRow('tasks', s.id, { deleted_at: now }, now));
   }
   const patch = (t: SeriesTemplate): SeriesTemplate => ({ ...t, subtasks: (t.subtasks ?? []).filter((x) => x.key !== key) });
-  return mergeChanges({ inserts: [], updates: [], deletes }, patchTemplates(state, l, patch, now));
+  return mergeChanges({ inserts: [], updates, deletes: [] }, patchTemplates(state, l, patch, now));
 }
 
 /** The segments of the lineage that reach the day or beyond end the day before it. */

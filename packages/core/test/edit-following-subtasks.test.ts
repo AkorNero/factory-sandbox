@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { applyChanges, occurrenceSubtaskId, type State } from '../src/index.ts';
+import { apply, applyChanges, occurrenceSubtaskId, type State } from '../src/index.ts';
+import { MON_10_15 } from './helpers.ts';
 import { dailyTask, idOn, lineageOf, run } from './series-fixtures.ts';
 
 const chores = () => dailyTask({ id: 'chores', template: { title: 'Clean flat', subtasks: [{ key: 'k1', title: 'Hoover' }, { key: 'k2', title: 'Bins' }] } });
@@ -122,6 +123,21 @@ describe('Remove a Sub-task of an Occurrence', () => {
     const later = run(state, { type: 'materialise', dates: ['2026-11-21'] });
     const made = later.tasks.find((t) => t.occurrence_date === '2026-11-21' && !t.parent_id)!;
     expect(later.tasks.filter((t) => t.parent_id === made.id).map((t) => t.title)).toEqual(['Bins']);
+  });
+
+  it('"This and following" marks the Sub-tasks deleted and removes no row, so a stale device cannot make them again', () => {
+    const state = chores();
+    const changes = apply(state, { type: 'deleteTask', id: sub('2026-11-18', 'k1'), scope: 'following' }, MON_10_15);
+    const after = applyChanges(state, changes);
+
+    expect(changes.deletes).toEqual([]);
+    expect(after.tasks.filter((t) => t.deleted_at).map((t) => t.id).sort()).toEqual(
+      ['2026-11-18', '2026-11-19', '2026-11-20'].map((d) => sub(d, 'k1')).sort(),
+    );
+    // a device that has not seen the template change makes the later Occurrences' Sub-tasks again: the rows are still there
+    const stale = run({ ...after, series: state.series }, { type: 'materialise', dates: ['2026-11-18', '2026-11-19', '2026-11-20'] });
+    expect(stale.tasks.filter((t) => t.id === sub('2026-11-19', 'k1'))).toHaveLength(1);
+    expect(stale.tasks.find((t) => t.id === sub('2026-11-19', 'k1'))?.deleted_at).not.toBeNull();
   });
 
   it('ticking a Sub-task never spreads to other Occurrences', () => {
