@@ -56,7 +56,7 @@ export function nextArrivesBy(all: SeriesRow[], seriesId: string, after: DateStr
   return all.filter((s) => s.lineage_id === own.lineage_id).some((s) => occurrenceDates(s, addDays(after, 1), upTo).length > 0);
 }
 
-const DAY_NAMES =['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
 
 /** The short name shown after ↻: "daily", "every 3 days", "weekdays", "Mon/Wed", "every 2 weeks · Mon", "monthly on the 31st". */
