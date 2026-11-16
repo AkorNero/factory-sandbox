@@ -94,6 +94,12 @@
   .c-chip .dots{font-size:10px;letter-spacing:1px;min-height:12px}
   .c-main{max-width:640px;margin:0 auto}
   .c-now{background:var(--accent);color:#fff;border-radius:18px;padding:16px 18px;margin-bottom:12px}
+  .c-live{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:12px}
+  .c-live .c-now{margin-bottom:0}
+  .c-live .c-now h2{font-size:20px}
+  .c-now.also{background:var(--accent-soft);color:var(--ink)}
+  .c-now.also .bar{background:var(--line)} .c-now.also .bar i{background:var(--accent)}
+  .c-now.also .item .tick{border-color:var(--mute)} .c-now.also .ctx{color:var(--mute)}
   .c-now .lbl{font-size:12px;text-transform:uppercase;letter-spacing:.08em;opacity:.8}
   .c-now h2{font-size:24px;margin:2px 0}
   .c-now .bar{height:5px;background:rgba(255,255,255,.3);border-radius:3px;margin:8px 0 10px}
@@ -134,7 +140,9 @@
   <button data-act="next" title="Next variant (→)">→</button>
   <span class="sep"></span>
   <span id="clock" style="padding:0 6px"></span>
-  <button data-act="hour" title="Advance clock 1 hour">+1h</button>
+  <button data-act="back" title="Clock back 15 min">−15m</button>
+  <input id="slider" type="range" min="360" max="1435" step="5" title="Drag to set the time" style="width:120px">
+  <button data-act="fwd" title="Clock forward 15 min">+15m</button>
   <button data-act="midnight" title="Jump to next day: runs Carry-over and Skipped">⏭ midnight</button>
   <span class="sep"></span>
   <button data-act="phone" title="Toggle phone-width frame">📱</button>
@@ -176,6 +184,8 @@ function reset() {
   ev(0, 'Dentist', 960, 1005);
   const errands = ev(0, 'Errands', 1020, 1080);
   const evening = ev(0, 'Evening focus', 1200, 1260);
+  ev(0, 'Call with Mum', 1035, 1065);
+  const laundry = ev(0, 'Laundry', 1020, 1110);
   ev(1, 'Yoga', 1080, 1140); ev(2, 'Team offsite', 600, 960); ev(3, 'Haircut', 720, 750);
   ev(5, "Dinner at Priya's", 1170, 1290); ev(9, 'Flight to Lisbon', 480, 660);
   materializeEvents(0, 13);
@@ -191,6 +201,7 @@ function reset() {
   tk('Return library books', 0, { eventId: errands.id });
   tk('Pay electricity bill', 0, { carried: 1 });
   tk('Reply to landlord', 0);
+  tk('Fold clothes', 0, { eventId: laundry.id });
   tk('Stretch 10 min', 0, { eventId: run.id, done: 445 });
   tk('Take vitamins', 0, { recurId: 'vit', done: 470 });
   tk('Water plants', 0, { recurId: 'plants', carried: 2 }); // occurrence from day -2, still unfinished
@@ -345,16 +356,22 @@ function VariantC() {
     return `<div class="c-main">${strip}<div class="c-other"><h2 style="margin-bottom:6px">${fmtDay(S.selDay, { weekday: 'long', day: 'numeric', month: 'long' })}</h2>${dayRows(S.selDay, 'r').replace(/class="r"/g, 'class="r" style="display:flex;gap:10px;padding:4px 0"').replace(/class="r ghost"/g, 'class="r ghost" style="display:flex;gap:10px;padding:4px 0;color:var(--ghost);font-style:italic"')}${openDayInput()}</div></div>`;
   }
   const evs = eventsOn(d);
-  const now = evs.filter(e => e.start <= S.time && S.time < e.end).sort((a, b) => b.start - a.start)[0];
-  const next = evs.find(e => e.start > S.time && e !== now);
-  const later = evs.filter(e => e.start > S.time && e !== next && e !== now);
-  const doneEv = evs.filter(e => e.end <= S.time && e !== now);
+  const live = evs.filter(e => e.start <= S.time && S.time < e.end).sort((a, b) => b.start - a.start); // latest started first
+  const nextAt = evs.find(e => e.start > S.time)?.start;
+  const nexts = evs.filter(e => e.start === nextAt); // Events starting together all count as Next
+  const later = evs.filter(e => e.start > S.time && !nexts.includes(e));
+  const doneEv = evs.filter(e => e.end <= S.time);
   let html = `<div class="c-main">${strip}${banner()}`;
-  if (now) {
-    const pct = Math.round(100 * (S.time - now.start) / (now.end - now.start));
-    html += `<div class="c-now"><div class="lbl">Now · ${hm(now.start)}–${hm(now.end)} · ${now.end - S.time} min left</div><h2>${esc(now.title)}</h2><div class="bar"><i style="width:${pct}%"></i></div>${placedIn(now.id).map(t => item(t, { ctx: parentCtx(t), showDone: false })).join('') || '<div style="opacity:.8">Nothing placed — free time</div>'}</div>`;
+  if (live.length) {
+    const card = (now, i) => {
+      const pct = Math.round(100 * (S.time - now.start) / (now.end - now.start));
+      return `<div class="c-now ${i ? 'also' : ''}"><div class="lbl">${i ? 'Also now' : 'Now'} · ${hm(now.start)}–${hm(now.end)} · ${now.end - S.time} min left</div><h2>${esc(now.title)}${now.recurId ? ' ↻' : ''}</h2><div class="bar"><i style="width:${pct}%"></i></div>${placedIn(now.id).map(t => item(t, { ctx: parentCtx(t), showDone: false })).join('') || '<div style="opacity:.8">Nothing placed</div>'}</div>`;
+    };
+    html += live.length > 1
+      ? `<div class="c-sec">${live.length} Events at once</div><div class="c-live">${live.map(card).join('')}</div>`
+      : card(live[0], 0);
   } else html += `<div class="c-now" style="background:var(--card);color:var(--ink);border:1px solid var(--line)"><div class="lbl">Now</div><h2>Free</h2><div class="mute">No Event right now — pick something from Anytime.</div></div>`;
-  if (next) html += `<div class="c-next"><div class="lbl">Next · ${hm(next.start)} (in ${next.start - S.time} min)</div><h3 style="margin:2px 0 4px">${esc(next.title)}</h3>${placedIn(next.id).map(t => item(t, { ctx: parentCtx(t) })).join('')}</div>`;
+  if (nexts.length) html += `<div class="c-next"><div class="lbl">Next · ${hm(nextAt)} (in ${nextAt - S.time} min)</div>${nexts.map(next => `<h3 style="margin:2px 0 4px">${esc(next.title)}</h3>${placedIn(next.id).map(t => item(t, { ctx: parentCtx(t) })).join('')}`).join('')}</div>`;
   const anytime = unplacedOn(d).flatMap(t => subsOf(t.id).length ? subsOf(t.id).filter(s => !s.eventId).map(s => ({ t: s, ctx: S.tasks.find(p => p.id === s.parentId).title })) : [{ t }]);
   html += `<div class="c-sec">Anytime today</div><div class="c-pills">${anytime.map(({ t, ctx }) => `<span class="c-pill ${t.done ? 'done' : ''} ${t.carried && isOpen(t) ? 'carry' : ''}"><button class="tick" data-tick="${t.id}">${t.done ? '✓' : ''}</button>${esc(t.title)}${ctx ? ` <span class="ctx">· ${esc(ctx)}</span>` : ''}${t.recurId ? ' <span class="badge recur">↻</span>' : ''}${t.carried && isOpen(t) ? ` <span class="badge carry">↪${t.carried}d</span>` : ''}</span>`).join('')}</div>`;
   if (later.length) html += `<div class="c-sec">Later today</div><div class="c-later">${later.map(e => `<div class="r"><span class="tm">${hm(e.start)}</span><span>${esc(e.title)}${e.recurId ? ' ↻' : ''} ${placedIn(e.id).length ? `<span class="mute small">· ${placedIn(e.id).map(t => esc(t.title)).join(', ')}</span>` : ''}</span></div>`).join('')}</div>`;
@@ -373,6 +390,7 @@ function render() {
   document.getElementById('app').innerHTML = VARIANTS[cur][1]();
   document.getElementById('vlabel').textContent = `${cur} (${VARIANTS[cur][0]})`;
   document.getElementById('clock').textContent = `${fmtDay(S.day)} ${hm(S.time)}`;
+  document.getElementById('slider').value = S.time;
   const dump = { variant: cur, day: fmtDay(S.day), time: hm(S.time),
     events: eventsOn(S.day).map(e => `${hm(e.start)}-${hm(e.end)} ${e.title}${e.recurId ? ' ↻' : ''} ← [${placedIn(e.id).map(t => t.title + (t.done ? ' ✓' : '')).join(', ')}]`),
     tasks: S.tasks.filter(t => t.date === S.day || (t.skipped && t.date >= S.day - 1)).map(t => `${t.parentId ? '  ↳ ' : ''}${t.title}${t.done ? ' ✓' + hm(t.done) : ''}${t.skipped ? ' SKIPPED' : ''}${t.carried ? ' carried' + t.carried : ''}${t.eventId ? ' @' + evById(t.eventId).title : ''}`),
@@ -386,7 +404,8 @@ document.addEventListener('click', e => {
   const act = a.dataset.act, i = KEYS.indexOf(cur);
   if (act === 'prev') setVariant(KEYS[(i - 1 + KEYS.length) % KEYS.length]);
   else if (act === 'next') setVariant(KEYS[(i + 1) % KEYS.length]);
-  else if (act === 'hour') { S.time = Math.min(S.time + 60, 23 * 60 + 59); render(); }
+  else if (act === 'back') { S.time = Math.max(S.time - 15, 0); render(); }
+  else if (act === 'fwd') { S.time = Math.min(S.time + 15, 23 * 60 + 59); render(); }
   else if (act === 'midnight') { midnight(); render(); }
   else if (act === 'phone') document.body.classList.toggle('phone');
   else if (act === 'state') document.getElementById('pstate').classList.toggle('open');
@@ -394,6 +413,7 @@ document.addEventListener('click', e => {
   else if (act === 'dismiss') { S.banner = null; render(); }
   else if (act === 'up') { S.upOpen = !S.upOpen; render(); }
 });
+document.addEventListener('input', e => { if (e.target.id === 'slider') { S.time = +e.target.value; render(); } });
 document.addEventListener('change', e => {
   if (e.target.dataset.act !== 'openday' || !e.target.value) return;
   const [y, m, d] = e.target.value.split('-').map(Number);
@@ -405,7 +425,10 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft') document.querySelector('[data-act=prev]').click();
   if (e.key === 'ArrowRight') document.querySelector('[data-act=next]').click();
 });
-reset(); render();
+reset();
+const tq = new URLSearchParams(location.search).get('t'); // e.g. ?t=17:20 to open at a given time
+if (tq) { const [h, m] = tq.split(':').map(Number); S.time = h * 60 + (m || 0); }
+render();
 </script>
 </body>
 </html>
