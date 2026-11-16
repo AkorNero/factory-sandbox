@@ -8,6 +8,8 @@ export function apply(state: State, command: Command, now: Now): Changes {
       return addTask(state, command, now);
     case 'tickTask':
       return tickTask(state, command.id, now);
+    case 'untickTask':
+      return untickTask(state, command.id, now);
   }
 }
 
@@ -48,6 +50,13 @@ function tickTask(state: State, id: string, now: Now): Changes {
   const task = liveTask(state, id);
   if (!task || task.completed_at) return noChanges();
   return updateTask(id, { completed_at: now, updated_at: now });
+}
+
+/** Unticking clears the Completion time. */
+function untickTask(state: State, id: string, now: Now): Changes {
+  const task = liveTask(state, id);
+  if (!task || !task.completed_at) return noChanges();
+  return updateTask(id, { completed_at: null, updated_at: now });
 }
 
 /** Apply changed rows to a state snapshot (used by tests, and by anything that wants the result in memory). */

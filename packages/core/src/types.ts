@@ -115,4 +115,5 @@ export type Command =
       /** null adds a Someday Task. */
       date: DateStr | null;
     }
-  | { type: 'tickTask'; id: string };
+  | { type: 'tickTask'; id: string }
+  | { type: 'untickTask'; id: string };

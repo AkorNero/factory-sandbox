@@ -47,3 +47,28 @@ describe('ticking a Task off', () => {
     expect(apply(aState(), { type: 'tickTask', id: 'nope' }, MON_10_15).updates).toEqual([]);
   });
 });
+
+describe('unticking a Task', () => {
+  const DONE_AT = '2026-11-16T09:40:00+01:00';
+
+  it('returns it to Anytime today and clears its Completion time', () => {
+    const state = aState({ tasks: [aTask({ id: 'a', title: 'Buy stamps', completed_at: DONE_AT })] });
+
+    const changes = apply(state, { type: 'untickTask', id: 'a' }, MON_10_15);
+    const after = applyChanges(state, changes);
+
+    expect(changes.updates).toEqual([
+      { table: 'tasks', id: 'a', set: { completed_at: null, updated_at: MON_10_15 } },
+    ]);
+    const view = dayView(after, TODAY, MON_10_15);
+    expect(view.anytime.items.map((i) => i.title)).toEqual(['Buy stamps']);
+    expect(view.done.count).toBe(0);
+    expect(after.tasks[0]?.completed_at).toBeNull();
+  });
+
+  it('does nothing for a Task that is not done', () => {
+    const state = aState({ tasks: [aTask({ id: 'a' })] });
+
+    expect(apply(state, { type: 'untickTask', id: 'a' }, MON_10_15).updates).toEqual([]);
+  });
+});
