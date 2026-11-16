@@ -15,3 +15,4 @@ Day Planner syncs through PowerSync, using SQLite in the browser on each device 
 - **No backups (accepted risk).** The Postgres volume on one disk is the only durable copy. iOS may evict the phone's local data, so a disk failure could lose everything not still cached in a browser.
 - Security rests on tailnet membership. Enabling Funnel or any public exposure requires adding real auth first.
 - Reminders (Web Push) are out of the MVP and played no part in this choice.
+- Step-by-step host setup, including an alternative without Docker Desktop: [docs/host-setup.md](../host-setup.md).
