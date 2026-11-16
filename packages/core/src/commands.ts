@@ -14,7 +14,7 @@ export function apply(state: State, command: Command, now: Now): Changes {
     case 'setEventTimes':
       return setEventTimes(state, command, now);
     case 'deleteEvent':
-      return deleteEvent(state, command);
+      return deleteEvent(state, command, now);
     case 'placeTask':
       return placeTask(state, command.id, command.eventId, now);
     case 'unplaceTask':
@@ -101,9 +101,19 @@ function setEventTimes(state: State, cmd: Extract<Command, { type: 'setEventTime
   return updateEvent(event.id, set, now);
 }
 
-function deleteEvent(state: State, cmd: Extract<Command, { type: 'deleteEvent' }>): Changes {
-  if (!findEvent(state, cmd.id)) return noChanges();
-  return { inserts: [], updates: [], deletes: [{ table: 'events', id: cmd.id }] };
+/** Deleting an Event deletes only the Event: its items are left Unplaced, on the day the Event was on. */
+function deleteEvent(state: State, cmd: Extract<Command, { type: 'deleteEvent' }>, now: Now): Changes {
+  const event = findEvent(state, cmd.id);
+  if (!event) return noChanges();
+  const updates = state.tasks
+    .filter((t) => t.event_id === event.id && !t.deleted_at)
+    .map((t) => ({
+      table: 'tasks' as const,
+      id: t.id,
+      // a Sub-task has no day of its own: it follows its parent
+      set: { event_id: null, ...(t.parent_id || t.date === event.date ? {} : { date: event.date }), updated_at: now },
+    }));
+  return { inserts: [], updates, deletes: [{ table: 'events', id: cmd.id }] };
 }
 
 function liveTask(state: State, id: string): TaskRow | undefined {

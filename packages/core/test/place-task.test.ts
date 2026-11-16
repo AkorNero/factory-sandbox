@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apply, applyChanges, dayView, type Command, type State } from '../src/index.ts';
+import { apply, applyChanges, canPlace, dayView, type Command, type State } from '../src/index.ts';
 import { MON_10_15, TODAY, aState, aTask, anEvent } from './helpers.ts';
 
 const run = (state: State, command: Command, now = MON_10_15) => applyChanges(state, apply(state, command, now));
@@ -97,6 +97,31 @@ describe('placing an existing Task into an Event', () => {
     expect(dayView(after, '2026-11-17', MON_10_15).later.events[0]?.tasks.map((t) => [t.title, t.parentTitle])).toEqual([
       ['Step', 'Project'],
     ]);
+  });
+});
+
+describe('whether a drop into an Event is allowed', () => {
+  const state = aState({
+    events: [anEvent({ id: 'e1' }), anEvent({ id: 'e2' })],
+    tasks: [
+      aTask({ id: 'free' }),
+      aTask({ id: 'in-e1', event_id: 'e1' }),
+      aTask({ id: 'parent' }),
+      aTask({ id: 'child', parent_id: 'parent', date: null }),
+    ],
+  });
+
+  it('allows a Task or Sub-task into an Event it is not in', () => {
+    expect(canPlace(state, 'free', 'e1')).toBe(true);
+    expect(canPlace(state, 'in-e1', 'e2')).toBe(true);
+    expect(canPlace(state, 'child', 'e1')).toBe(true);
+  });
+
+  it('refuses the Event it is already in, a Task with Sub-tasks, and things that are missing', () => {
+    expect(canPlace(state, 'in-e1', 'e1')).toBe(false);
+    expect(canPlace(state, 'parent', 'e1')).toBe(false);
+    expect(canPlace(state, 'nope', 'e1')).toBe(false);
+    expect(canPlace(state, 'free', 'nope')).toBe(false);
   });
 });
 

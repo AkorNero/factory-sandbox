@@ -34,8 +34,15 @@ export interface EventCard {
   startsInMinutes: number | null;
   /** Minutes since it ended; null on any day but today. */
   endedMinutesAgo: number | null;
-  /** The Tasks and Sub-tasks placed in it. */
+  /** The Tasks and Sub-tasks placed in it, done ones included. */
   tasks: ItemView[];
+  /** How many of the placed items are done, out of how many are placed ("1/3 done"). */
+  placedDone: number;
+  placedTotal: number;
+  /** The slot ended with unfinished placed items. They stay in the Event; nothing moves yet. */
+  slotMissed: boolean;
+  /** The items done in this Event (from their Completion time), whether or not they were placed in it. */
+  doneHere: ItemView[];
 }
 
 /** A live Event on the Now card. */
@@ -48,6 +55,8 @@ export interface NowCard {
   /** 0 to 1 */
   progress: number;
   tasks: ItemView[];
+  placedDone: number;
+  placedTotal: number;
 }
 
 export interface DayView {
@@ -67,8 +76,14 @@ export interface DayView {
 
 const STRIP_DAYS = 8; // today and the next 7
 
+const placedCounts = (tasks: ItemView[]) => ({
+  tasks,
+  placedDone: tasks.filter((t) => t.completedTime).length,
+  placedTotal: tasks.length,
+});
+
 /** Where the day's Events stand against the clock. */
-function eventSections(events: EventRow[], date: DateStr, now: Now, placed: (eventId: string) => ItemView[]) {
+function eventSections(events: EventRow[], date: DateStr, now: Now, placed: (eventId: string) => ItemView[], doneIn: (eventId: string) => ItemView[]) {
   const day = events.filter((e) => !e.deleted_at && e.date === date);
   const isToday = date === dateOf(now);
   const nowMin = minutesOf(timeOf(now));
@@ -85,7 +100,9 @@ function eventSections(events: EventRow[], date: DateStr, now: Now, placed: (eve
     durationMinutes: minutesOf(e.end_time) - minutesOf(e.start_time),
     startsInMinutes: isToday ? minutesOf(e.start_time) - nowMin : null,
     endedMinutesAgo: isToday ? nowMin - minutesOf(e.end_time) : null,
-    tasks: placed(e.id),
+    ...placedCounts(placed(e.id)),
+    slotMissed: phase(e) === 'earlier' && placed(e.id).some((t) => !t.completedTime),
+    doneHere: doneIn(e.id),
   });
   const byStart = (a: EventRow, b: EventRow) =>
     a.start_time.localeCompare(b.start_time) || a.end_time.localeCompare(b.end_time) || a.id.localeCompare(b.id);
@@ -103,7 +120,7 @@ function eventSections(events: EventRow[], date: DateStr, now: Now, placed: (eve
       cards: live.map((e): NowCard => {
         const left = minutesOf(e.end_time) - nowMin;
         const length = minutesOf(e.end_time) - minutesOf(e.start_time);
-        return { id: e.id, title: e.title, start: e.start_time, end: e.end_time, minutesLeft: left, progress: 1 - left / length, tasks: placed(e.id) };
+        return { id: e.id, title: e.title, start: e.start_time, end: e.end_time, minutesLeft: left, progress: 1 - left / length, ...placedCounts(placed(e.id)) };
       }),
     },
     next: nextStart ? { start: nextStart, startsInMinutes: minutesOf(nextStart) - nowMin, events: next.map(card) } : null,
@@ -155,6 +172,13 @@ export function dayView(state: State, date: DateStr, now: Now): DayView {
       .sort((a, b) => a.position - b.position)
       .map(toItem);
 
+  const doneInEventId = (t: TaskRow) => (t.completed_at ? doneInEvent(t, events)?.id : undefined);
+  const doneHere = (eventId: string) =>
+    live
+      .filter((t) => doneInEventId(t) === eventId)
+      .sort((a, b) => (a.completed_at! < b.completed_at! ? 1 : -1))
+      .map(toItem);
+
   const dayTasks = live.filter((t) => effectiveDay(t) === date);
   const open = dayTasks.filter((t) => !t.completed_at && !t.skipped_at);
   const anytime = open
@@ -178,7 +202,7 @@ export function dayView(state: State, date: DateStr, now: Now): DayView {
   return {
     date,
     isToday: date === dateOf(now),
-    ...eventSections(state.events, date, now, placed),
+    ...eventSections(state.events, date, now, placed, doneHere),
     anytime: { count: anytime.length, items: anytime.map(toItem) },
     done: { count: done.length, total: dayTasks.length, items: done.map(toItem) },
     someday: { count: someday.length, items: someday.map(toItem) },
