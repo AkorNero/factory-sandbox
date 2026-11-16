@@ -208,7 +208,7 @@ function SyncBadge() {
 }
 
 /** Whether a drop is allowed, asked of the core. A drop on Anytime means "the day shown". */
-function canDrop(state: State, shown: string, source: DragSource, target: DropTarget): boolean {
+function canDrop(state: State, shownDay: string, source: DragSource, target: DropTarget): boolean {
   if (source.kind === 'event') return target.kind === 'day' && canMoveEvent(state, source.id, target.date);
   switch (target.kind) {
     case 'event':
@@ -216,7 +216,7 @@ function canDrop(state: State, shown: string, source: DragSource, target: DropTa
     case 'day':
       return canDateTask(state, source.id, target.date);
     case 'anytime':
-      return canDateTask(state, source.id, shown);
+      return canDateTask(state, source.id, shownDay);
     case 'someday':
       return canUndate(state, source.id);
   }
