@@ -52,7 +52,7 @@ describe('dating a Task to a day', () => {
     expect(after.tasks.find((t) => t.id === 's')?.date).toBe(TUE);
   });
 
-  it('keeps the Placements of the Sub-tasks of a Task that is dated', () => {
+  it('clears the Placements of the open Sub-tasks of a Task that is dated (they follow their parent)', () => {
     const state = aState({
       events: [anEvent({ id: 'work' })],
       tasks: [aTask({ id: 'p', title: 'Project' }), aTask({ id: 'st', title: 'Step', parent_id: 'p', date: null, event_id: 'work' })],
@@ -61,7 +61,7 @@ describe('dating a Task to a day', () => {
     const after = run(state, { type: 'dateTask', id: 'p', date: TUE });
 
     expect(after.tasks.find((t) => t.id === 'p')?.date).toBe(TUE);
-    expect(after.tasks.find((t) => t.id === 'st')).toMatchObject({ event_id: 'work' });
+    expect(after.tasks.find((t) => t.id === 'st')).toMatchObject({ event_id: null });
   });
 
   it('does nothing when there is nothing to change, or the Task does not exist', () => {

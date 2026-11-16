@@ -177,7 +177,13 @@ function moveEvent(state: State, id: string, date: DateStr, now: Now): Changes {
   return { inserts: [], updates: [...updateEvent(id, { date }, now).updates, ...tasks], deletes: [] };
 }
 
-const hasSubtasks = (state: State, id: string) => state.tasks.some((t) => t.parent_id === id && !t.deleted_at);
+const subtasksOf = (state: State, id: string) => state.tasks.filter((t) => t.parent_id === id && !t.deleted_at);
+/** A Task with Sub-tasks is done exactly when all of them are; any other Task when it has a Completion time. */
+const isDone = (state: State, task: TaskRow) => {
+  const subs = subtasksOf(state, task.id);
+  return subs.length ? subs.every((s) => s.completed_at) : !!task.completed_at;
+};
+const hasSubtasks = (state: State, id: string) => subtasksOf(state, id).length > 0;
 
 function liveTask(state: State, id: string): TaskRow | undefined {
   return state.tasks.find((t) => t.id === id && !t.deleted_at);
@@ -221,7 +227,7 @@ function unplaceTask(state: State, id: string, now: Now): Changes {
  */
 export function canUndate(state: State, id: string): boolean {
   const task = liveTask(state, id);
-  return !!task && !task.parent_id && task.date !== null && !task.completed_at && !task.series_id;
+  return !!task && !task.parent_id && task.date !== null && !isDone(state, task) && !task.series_id;
 }
 
 /** The Task is left with no date and no Placement. */
@@ -239,17 +245,25 @@ function undateTask(state: State, id: string, now: Now): Changes {
 export function canDateTask(state: State, id: string, date: DateStr): boolean {
   const task = liveTask(state, id);
   if (!task || task.parent_id) return false;
-  return task.date !== date || task.event_id !== null;
+  return task.date !== date || task.event_id !== null || placedOpenSubtasks(state, id).length > 0;
 }
 
-/** The Task takes the day and loses its Placement, so it is in Anytime on that day. Its Sub-tasks keep theirs. */
+/** The open Sub-tasks of a Task that have a Placement: re-dating the Task clears those. */
+const placedOpenSubtasks = (state: State, id: string) => subtasksOf(state, id).filter((s) => !s.completed_at && s.event_id !== null);
+
+/**
+ * The Task takes the day and loses its Placement, so it is in Anytime on that day. A parent brings its open Sub-tasks
+ * along: their Placements are cleared, so they follow it. Done Sub-tasks keep theirs.
+ */
 function dateTask(state: State, id: string, date: DateStr, now: Now): Changes {
   if (!canDateTask(state, id, date)) return noChanges();
   const task = liveTask(state, id)!;
   const set: Record<string, unknown> = {};
   if (task.date !== date) set.date = date;
   if (task.event_id !== null) set.event_id = null;
-  return updateTask(id, { ...set, updated_at: now });
+  const own = Object.keys(set).length ? updateTask(id, { ...set, updated_at: now }).updates : [];
+  const subs = placedOpenSubtasks(state, id).flatMap((s) => updateTask(s.id, { event_id: null, updated_at: now }).updates);
+  return { inserts: [], updates: [...own, ...subs], deletes: [] };
 }
 
 /**
@@ -304,10 +318,11 @@ function renameTask(state: State, id: string, title: string, now: Now): Changes 
   return updateTask(id, { title: trimmed, updated_at: now });
 }
 
-/** A one-off Task is hard-deleted. */
+/** A one-off Task is hard-deleted, and its Sub-tasks with it. */
 function deleteTask(state: State, id: string): Changes {
   if (!liveTask(state, id)) return noChanges();
-  return { inserts: [], updates: [], deletes: [{ table: 'tasks', id }] };
+  const subs = subtasksOf(state, id).map((s) => ({ table: 'tasks' as const, id: s.id }));
+  return { inserts: [], updates: [], deletes: [{ table: 'tasks', id }, ...subs] };
 }
 
 /** Apply changed rows to a state snapshot (used by tests, and by anything that wants the result in memory). */
