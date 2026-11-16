@@ -29,3 +29,10 @@ export const lineageOf = (state: State, lineageId: string) =>
   state.series.filter((s) => s.lineage_id === lineageId).sort((a, b) => a.starts_on.localeCompare(b.starts_on) || a.id.localeCompare(b.id));
 
 export const NOTHING = { inserts: [], updates: [], deletes: [] };
+
+/**
+ * A Task Occurrence that was moved to another day by hand. A daily Task cannot be dragged past its next Occurrence
+ * (the drag limit), so the row is set directly, as it would be after a move that was allowed on a sparser schedule.
+ */
+export const handMoved = (state: State, id: string, date: string): State =>
+  applyChanges(state, { inserts: [], updates: [{ table: 'tasks', id, set: { date } }], deletes: [] });

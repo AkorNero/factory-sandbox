@@ -305,8 +305,16 @@ const placedOpenSubtasks = (state: State, id: string) => subtasksOf(state, id).f
  * along: their Placements are cleared, so they follow it. Done Sub-tasks keep theirs.
  */
 export function dateTask(state: State, id: string, date: DateStr, now: Now): Changes {
-  if (!canDateTask(state, id, date)) return noChanges();
-  const task = liveTask(state, id)!;
+  return canDateTask(state, id, date) ? setTaskDay(state, id, date, now) : noChanges();
+}
+
+/**
+ * Dating without the drag limit: for the rebuild of a schedule, which removes the Occurrences the limit protects the
+ * Task from. The Task takes the day and loses its Placement, like a drop.
+ */
+export function setTaskDay(state: State, id: string, date: DateStr, now: Now): Changes {
+  const task = liveTask(state, id);
+  if (!task) return noChanges();
   const set: Record<string, unknown> = {};
   if (task.date !== date) set.date = date;
   if (task.event_id !== null) set.event_id = null;

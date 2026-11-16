@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { apply, dayView, splitSeriesId } from '../src/index.ts';
 import { MON_10_15 } from './helpers.ts';
-import { DAYS, NOTHING, dailyTask, idOn, lineageOf, run, taskTitles } from './series-fixtures.ts';
+import { DAYS, NOTHING, dailyTask, handMoved, idOn, lineageOf, run, taskTitles } from './series-fixtures.ts';
 
 describe('Rename an Occurrence of a Task', () => {
   it('"Just this one" changes only that Occurrence and it stays linked', () => {
@@ -90,7 +90,7 @@ describe('Rename an Occurrence of a Task', () => {
   });
 
   it('renames a hand-moved Occurrence too, keeps it linked and makes no duplicate on its original day', () => {
-    const state = run(dailyTask(), { type: 'dateTask', id: idOn('daily', '2026-11-19'), date: '2026-11-20' });
+    const state = handMoved(dailyTask(), idOn('daily', '2026-11-19'), '2026-11-20');
     const after = run(state, { type: 'renameTask', id: idOn('daily', '2026-11-18'), title: 'Water the ferns', scope: 'following' });
 
     expect(after.tasks.find((t) => t.id === idOn('daily', '2026-11-19'))).toMatchObject({

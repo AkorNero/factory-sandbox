@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { apply, applyChanges, dayView, type State } from '../src/index.ts';
 import { MON_10_15, aTask } from './helpers.ts';
-import { NOTHING, dailyEvent, dailyTask, idOn, lineageOf, run } from './series-fixtures.ts';
+import { NOTHING, dailyEvent, dailyTask, handMoved, idOn, lineageOf, run } from './series-fixtures.ts';
 
 const taskDates = (state: State) => state.tasks.filter((t) => !t.parent_id).map((t) => t.occurrence_date ?? `one-off ${t.date}`).sort();
 const gym = (d: string) => idOn('gym', d);
@@ -143,7 +143,7 @@ describe('Delete an Occurrence', () => {
 
 describe('A moved Occurrence', () => {
   it('stays linked to its series and leaves no duplicate on its original day, also after the series is split', () => {
-    let state = run(dailyTask(), { type: 'dateTask', id: idOn('daily', '2026-11-18'), date: '2026-11-21' });
+    let state = handMoved(dailyTask(), idOn('daily', '2026-11-18'), '2026-11-21');
     state = run(state, { type: 'renameTask', id: idOn('daily', '2026-11-17'), title: 'Mist', scope: 'following' });
 
     const after = run(state, { type: 'materialise', dates: ['2026-11-18'] });

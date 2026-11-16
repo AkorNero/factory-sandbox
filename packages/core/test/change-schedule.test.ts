@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { apply, applyChanges, asksScope, canEditSchedule, dayView, type RecurrenceRule, type State } from '../src/index.ts';
 import { MON_10_15, aTask, anEvent } from './helpers.ts';
-import { NOTHING, dailyEvent, dailyTask, idOn, lineageOf, run, taskTitles } from './series-fixtures.ts';
+import { NOTHING, dailyEvent, dailyTask, handMoved, idOn, lineageOf, run, taskTitles } from './series-fixtures.ts';
 
 const weekdaysMonWed: RecurrenceRule = { rule: 'weekdays', weekdays: [1, 3] };
 const dates = (state: State) => state.tasks.filter((t) => !t.parent_id && !t.deleted_at).map((t) => t.date).sort();
@@ -10,7 +10,7 @@ describe('Change schedule on a Task Occurrence', () => {
   it('removes every later Occurrence, hand-edited ones too, and rebuilds them on the new rule', () => {
     let state = dailyTask();
     state = run(state, { type: 'renameTask', id: idOn('daily', '2026-11-19'), title: 'Hand edited', scope: 'one' });
-    state = run(state, { type: 'dateTask', id: idOn('daily', '2026-11-20'), date: '2026-11-22' });
+    state = handMoved(state, idOn('daily', '2026-11-20'), '2026-11-22');
 
     const after = run(state, { type: 'changeSchedule', id: idOn('daily', '2026-11-17'), seriesId: 'mw', recurrence: weekdaysMonWed });
     const rebuilt = run(after, { type: 'materialise', dates: ['2026-11-18', '2026-11-19', '2026-11-20', '2026-11-22', '2026-11-23', '2026-11-25'] });

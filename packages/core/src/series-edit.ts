@@ -3,7 +3,7 @@ import { addDays, today } from './dates.ts';
 import { occurrenceSubtaskId, splitSeriesId } from './ids.ts';
 import type { Changes, Command, EventRow, Now, SeriesRow, SeriesTemplate, State, TaskRow, Update } from './types.ts';
 import { noChanges } from './types.ts';
-import { addSubtask as addSubtaskRow, canAddSubtask, dateTask, isDone, moveEvent, unplaceItemsOf } from './commands.ts';
+import { addSubtask as addSubtaskRow, canAddSubtask, isDone, moveEvent, setTaskDay, unplaceItemsOf } from './commands.ts';
 import { checkEventTimes, normaliseTime } from './event-input.ts';
 import { occurrenceDates } from './recurrence.ts';
 import { parseTemplate, ruleColumns } from './series.ts';
@@ -267,7 +267,7 @@ export function changeSchedule(state: State, cmd: Extract<Command, { type: 'chan
   const link = { series_id: cmd.seriesId, occurrence_date: first, updated_at: now };
   const move: Update[] = [];
   if (occ.kind === 'task') {
-    if (occ.row.date !== first) move.push(...dateTask(state, occ.row.id, first, now).updates);
+    if (occ.row.date !== first) move.push(...setTaskDay(state, occ.row.id, first, now).updates);
     move.push({ table: 'tasks', id: occ.row.id, set: link });
   } else {
     if (occ.row.date !== first) move.push(...moveEvent(state, occ.row.id, first, now).updates);
