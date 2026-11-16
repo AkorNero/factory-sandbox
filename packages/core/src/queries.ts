@@ -5,6 +5,9 @@ export interface ItemView {
   id: string;
   title: string;
   parentTitle: string | null;
+  parentId: string | null;
+  /** For a Task with Sub-tasks: how many are done, out of how many. null for any other item. */
+  subtasks: { done: number; total: number } | null;
   carriedOver: boolean;
   recurring: boolean;
   /** A Task with no date: it is in Someday. */
@@ -156,7 +159,8 @@ function doneInEvent(task: TaskRow, events: Map<string, EventRow>): EventRow | u
  * Everything the screen shows for one day. State, a date and "now" in; a view out. Nothing here is stored.
  * `pickedDays` are the later days the user added to the strip with "Pick a day".
  */
-export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateStr[] = []): DayView {
+/** What the views need to turn rows into items. */
+function itemContext(state: State, now: Now) {
   const live = state.tasks.filter((t) => !t.deleted_at);
   const byId = new Map(live.map((t) => [t.id, t]));
   const events = new Map(state.events.filter((e) => !e.deleted_at).map((e) => [e.id, e]));
@@ -166,10 +170,16 @@ export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateS
   const effectiveDay = (t: TaskRow): DateStr | null =>
     placedIn(t)?.date ?? (t.parent_id ? (byId.get(t.parent_id)?.date ?? null) : t.date);
 
+  const subtasksOf = (id: string) => live.filter((t) => t.parent_id === id);
+  /** A Task with Sub-tasks is done exactly when all of them are; nothing is stored on it. */
+  const isDone = (t: TaskRow) => (subtasksOf(t.id).length ? subtasksOf(t.id).every((s) => s.completed_at) : !!t.completed_at);
+
   const toItem = (t: TaskRow): ItemView => ({
     id: t.id,
     title: t.title,
     parentTitle: t.parent_id ? (byId.get(t.parent_id)?.title ?? null) : null,
+    parentId: t.parent_id,
+    subtasks: subtasksOf(t.id).length ? { done: subtasksOf(t.id).filter((s) => s.completed_at).length, total: subtasksOf(t.id).length } : null,
     carriedOver: t.carried_over,
     recurring: t.series_id !== null,
     someday: t.parent_id === null && t.date === null,
@@ -177,6 +187,21 @@ export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateS
     placement: placedIn(t) ? { eventId: t.event_id!, title: placedIn(t)!.title } : null,
     doneIn: t.completed_at ? (doneInEvent(t, events)?.title ?? null) : null,
   });
+  return { live, byId, events, placedIn, effectiveDay, subtasksOf, isDone, toItem };
+}
+
+/**
+ * One Task or Sub-task as an item, wherever it is on screen (or on no screen: a Task with Sub-tasks is never
+ * listed on a day, but its tap menu can still be opened from one of its Sub-tasks).
+ */
+export function taskItem(state: State, id: string, now: Now): ItemView | undefined {
+  const c = itemContext(state, now);
+  const t = c.byId.get(id);
+  return t && c.toItem(t);
+}
+
+export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateStr[] = []): DayView {
+  const { live, byId, events, placedIn, effectiveDay, isDone, toItem } = itemContext(state, now);
   const placed = (eventId: string) =>
     live
       .filter((t) => t.event_id === eventId && !t.skipped_at)
@@ -190,7 +215,9 @@ export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateS
       .sort((a, b) => (a.completed_at! < b.completed_at! ? 1 : -1))
       .map(toItem);
 
-  const dayTasks = live.filter((t) => effectiveDay(t) === date);
+  /** A Task with Sub-tasks is never listed on a day itself: its Sub-tasks are. */
+  const hasSubtasks = new Set(live.filter((t) => t.parent_id).map((t) => t.parent_id));
+  const dayTasks = live.filter((t) => !hasSubtasks.has(t.id) && effectiveDay(t) === date);
   const open = dayTasks.filter((t) => !t.completed_at && !t.skipped_at);
   const anytime = open
     .filter((t) => !placedIn(t))
@@ -198,7 +225,7 @@ export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateS
   const done = dayTasks
     .filter((t) => t.completed_at)
     .sort((a, b) => (a.completed_at! < b.completed_at! ? 1 : -1));
-  const someday = live.filter((t) => t.parent_id === null && t.date === null && !t.completed_at).sort((a, b) => a.position - b.position);
+  const someday = live.filter((t) => t.parent_id === null && t.date === null && !isDone(t)).sort((a, b) => a.position - b.position);
 
   const start = today(now);
   const picked = [...new Set(pickedDays.filter((d) => canPickDay(now, d)))].sort();
@@ -207,7 +234,7 @@ export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateS
     return {
       date: d,
       events: state.events.filter((e) => !e.deleted_at && e.date === d).length,
-      tasks: live.filter((t) => effectiveDay(t) === d && !t.completed_at && !t.skipped_at).length,
+      tasks: live.filter((t) => !hasSubtasks.has(t.id) && effectiveDay(t) === d && !t.completed_at && !t.skipped_at).length,
     };
   });
 

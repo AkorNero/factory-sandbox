@@ -1,4 +1,5 @@
 import { checkEventTimes, normaliseTime } from './event-input.ts';
+import { dateOf } from './dates.ts';
 import type { Changes, Command, DateStr, EventRow, Now, State, TaskRow } from './types.ts';
 import { noChanges } from './types.ts';
 
@@ -7,6 +8,8 @@ export function apply(state: State, command: Command, now: Now): Changes {
   switch (command.type) {
     case 'addTask':
       return addTask(state, command, now);
+    case 'addSubtask':
+      return addSubtask(state, command, now);
     case 'addEvent':
       return addEvent(command, now);
     case 'renameEvent':
@@ -43,7 +46,7 @@ function addTask(state: State, cmd: Extract<Command, { type: 'addTask' }>, now: 
   if (!title) return noChanges();
   const event = cmd.eventId ? findEvent(state, cmd.eventId) : undefined;
   if (cmd.eventId && !event) return noChanges();
-  const position = Math.max(0, ...state.tasks.map((t) => t.position)) + 1;
+  const position = nextPosition(state);
   const row: TaskRow = {
     id: cmd.id,
     parent_id: null,
@@ -62,6 +65,46 @@ function addTask(state: State, cmd: Extract<Command, { type: 'addTask' }>, now: 
     updated_at: now,
   };
   return { inserts: [{ table: 'tasks', row }], updates: [], deletes: [] };
+}
+
+const nextPosition = (state: State) => Math.max(0, ...state.tasks.map((t) => t.position)) + 1;
+
+/** Whether a Sub-task can be added to the Task: it exists and is not a Sub-task itself (Sub-tasks never have Sub-tasks). */
+export function canAddSubtask(state: State, id: string): boolean {
+  const task = liveTask(state, id);
+  return !!task && !task.parent_id;
+}
+
+function addSubtask(state: State, cmd: Extract<Command, { type: 'addSubtask' }>, now: Now): Changes {
+  const title = cmd.title.trim();
+  const parent = liveTask(state, cmd.parentId);
+  if (!title || !parent || !canAddSubtask(state, parent.id)) return noChanges();
+  const row: TaskRow = {
+    id: cmd.id,
+    parent_id: parent.id,
+    title,
+    date: null,
+    // the first Sub-task takes over its parent's Placement
+    event_id: hasSubtasks(state, parent.id) ? null : parent.event_id,
+    completed_at: null,
+    skipped_at: null,
+    carried_over: false,
+    position: nextPosition(state),
+    series_id: null,
+    occurrence_date: null,
+    series_subtask_key: null,
+    deleted_at: null,
+    created_at: now,
+    updated_at: now,
+  };
+  const first = !hasSubtasks(state, parent.id);
+  // a parent has no Placement and no Completion time of its own: the first Sub-task takes over the Placement,
+  // and adding one to a done Task reopens it
+  const set: Record<string, unknown> = {};
+  if (first && parent.event_id) set.event_id = null;
+  if (parent.completed_at) set.completed_at = null;
+  const updates = Object.keys(set).length ? updateTask(parent.id, { ...set, updated_at: now }).updates : [];
+  return { inserts: [{ table: 'tasks', row }], updates, deletes: [] };
 }
 
 function addEvent(cmd: Extract<Command, { type: 'addEvent' }>, now: Now): Changes {
@@ -140,6 +183,14 @@ function moveEvent(state: State, id: string, date: DateStr, now: Now): Changes {
   return { inserts: [], updates: [...updateEvent(id, { date }, now).updates, ...tasks], deletes: [] };
 }
 
+const subtasksOf = (state: State, id: string) => state.tasks.filter((t) => t.parent_id === id && !t.deleted_at);
+/** A Task with Sub-tasks is done exactly when all of them are; any other Task when it has a Completion time. */
+const isDone = (state: State, task: TaskRow) => {
+  const subs = subtasksOf(state, task.id);
+  return subs.length ? subs.every((s) => s.completed_at) : !!task.completed_at;
+};
+const hasSubtasks = (state: State, id: string) => subtasksOf(state, id).length > 0;
+
 function liveTask(state: State, id: string): TaskRow | undefined {
   return state.tasks.find((t) => t.id === id && !t.deleted_at);
 }
@@ -155,7 +206,7 @@ function updateTask(id: string, set: Record<string, unknown>): Changes {
 export function canPlace(state: State, id: string, eventId: string): boolean {
   const task = liveTask(state, id);
   if (!task || !findEvent(state, eventId) || task.event_id === eventId) return false;
-  return !state.tasks.some((t) => t.parent_id === id && !t.deleted_at);
+  return !hasSubtasks(state, id);
 }
 
 /** A Task takes the Event's day; a Sub-task keeps its own and follows the Event through its Placement. */
@@ -182,7 +233,7 @@ function unplaceTask(state: State, id: string, now: Now): Changes {
  */
 export function canUndate(state: State, id: string): boolean {
   const task = liveTask(state, id);
-  return !!task && !task.parent_id && task.date !== null && !task.completed_at && !task.series_id;
+  return !!task && !task.parent_id && task.date !== null && !isDone(state, task) && !task.series_id;
 }
 
 /** The Task is left with no date and no Placement. */
@@ -200,24 +251,52 @@ function undateTask(state: State, id: string, now: Now): Changes {
 export function canDateTask(state: State, id: string, date: DateStr): boolean {
   const task = liveTask(state, id);
   if (!task || task.parent_id) return false;
-  return task.date !== date || task.event_id !== null;
+  return task.date !== date || task.event_id !== null || placedOpenSubtasks(state, id).length > 0;
 }
 
-/** The Task takes the day and loses its Placement, so it is in Anytime on that day. Its Sub-tasks keep theirs. */
+/** The open Sub-tasks of a Task that have a Placement: re-dating the Task clears those. */
+const placedOpenSubtasks = (state: State, id: string) => subtasksOf(state, id).filter((s) => !s.completed_at && s.event_id !== null);
+
+/**
+ * The Task takes the day and loses its Placement, so it is in Anytime on that day. A parent brings its open Sub-tasks
+ * along: their Placements are cleared, so they follow it. Done Sub-tasks keep theirs.
+ */
 function dateTask(state: State, id: string, date: DateStr, now: Now): Changes {
   if (!canDateTask(state, id, date)) return noChanges();
   const task = liveTask(state, id)!;
   const set: Record<string, unknown> = {};
   if (task.date !== date) set.date = date;
   if (task.event_id !== null) set.event_id = null;
-  return updateTask(id, { ...set, updated_at: now });
+  const own = Object.keys(set).length ? updateTask(id, { ...set, updated_at: now }).updates : [];
+  const subs = placedOpenSubtasks(state, id).flatMap((s) => updateTask(s.id, { event_id: null, updated_at: now }).updates);
+  return { inserts: [], updates: [...own, ...subs], deletes: [] };
 }
 
-/** Ticking records the Completion time. A Task that is already done keeps the time it has. */
+/**
+ * Ticking records the Completion time; a Task that is already done keeps the time it has. A Someday Task is also
+ * dated to the day it was ticked, so it shows in that day's Done today. Ticking a Task with Sub-tasks ticks all its
+ * remaining Sub-tasks with the same time; a Someday parent is dated when it becomes done, by either way.
+ */
 function tickTask(state: State, id: string, now: Now): Changes {
   const task = liveTask(state, id);
-  if (!task || task.completed_at) return noChanges();
-  return updateTask(id, { completed_at: now, updated_at: now });
+  if (!task) return noChanges();
+  const subs = state.tasks.filter((t) => t.parent_id === id && !t.deleted_at);
+  const day = { date: dateOf(now) };
+  if (subs.length) {
+    const open = subs.filter((s) => !s.completed_at);
+    if (!open.length) return noChanges();
+    const ticks = open.flatMap((s) => updateTask(s.id, { completed_at: now, updated_at: now }).updates);
+    const dating = task.date === null ? updateTask(id, { ...day, updated_at: now }).updates : [];
+    return { inserts: [], updates: [...ticks, ...dating], deletes: [] };
+  }
+  if (task.completed_at) return noChanges();
+  const set: Record<string, unknown> = { completed_at: now };
+  if (!task.parent_id && task.date === null) set.date = day.date;
+  const parent = task.parent_id ? liveTask(state, task.parent_id) : undefined;
+  const siblings = parent ? state.tasks.filter((t) => t.parent_id === parent.id && !t.deleted_at && t.id !== id) : [];
+  const completesParent = !!parent && parent.date === null && siblings.every((t) => t.completed_at);
+  const dating = completesParent ? updateTask(parent!.id, { ...day, updated_at: now }).updates : [];
+  return { inserts: [], updates: [...updateTask(id, { ...set, updated_at: now }).updates, ...dating], deletes: [] };
 }
 
 /** Unticking clears the Completion time. */
@@ -245,10 +324,11 @@ function renameTask(state: State, id: string, title: string, now: Now): Changes 
   return updateTask(id, { title: trimmed, updated_at: now });
 }
 
-/** A one-off Task is hard-deleted. */
+/** A one-off Task is hard-deleted, and its Sub-tasks with it. */
 function deleteTask(state: State, id: string): Changes {
   if (!liveTask(state, id)) return noChanges();
-  return { inserts: [], updates: [], deletes: [{ table: 'tasks', id }] };
+  const subs = subtasksOf(state, id).map((s) => ({ table: 'tasks' as const, id: s.id }));
+  return { inserts: [], updates: [], deletes: [{ table: 'tasks', id }, ...subs] };
 }
 
 /** Apply changed rows to a state snapshot (used by tests, and by anything that wants the result in memory). */
