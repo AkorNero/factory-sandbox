@@ -9,6 +9,16 @@ export interface ItemActions {
   onOpen: (id: string) => void;
 }
 
+/** The recurrence tag: a bare ↻, or in full ("↻ daily") where there is room: rows, and the pills of a later day. */
+export function Recurrence({ recurrence, full }: { recurrence: string | null; full?: boolean }) {
+  if (recurrence === null) return null;
+  return (
+    <span className="rtag" title={`repeats ${recurrence}`}>
+      {full ? `↻ ${recurrence}` : '↻'}
+    </span>
+  );
+}
+
 export const label = (i: ItemView) => (i.parentTitle ? `${i.parentTitle} › ${i.title}` : i.title);
 
 /** `09:40 · Deep work`, or just the time when it was done outside every Event. */
@@ -38,7 +48,7 @@ function Tick({ item, onTick }: { item: ItemView; onTick: ItemActions['onTick'] 
 }
 
 /** One pill: the round tick toggles done, the label opens the tap menu. An open one can be dragged. */
-export function Pill({ item, onTick, onOpen }: { item: ItemView } & ItemActions) {
+export function Pill({ item, onTick, onOpen, fullTag }: { item: ItemView; fullTag?: boolean } & ItemActions) {
   const isDone = item.completedTime !== null;
   const drag = useDrag().dragProps({ id: item.id, label: label(item) });
   return (
@@ -48,7 +58,7 @@ export function Pill({ item, onTick, onOpen }: { item: ItemView } & ItemActions)
         {label(item)}
       </button>
       {item.carriedOver && <span className="badge warn">↪</span>}
-      {item.recurring && <span className="badge">↻</span>}
+      <Recurrence recurrence={item.recurrence} full={fullTag} />
       <Progress item={item} />
       {isDone && <small className="mute">{doneNote(item)}</small>}
     </li>
@@ -65,6 +75,7 @@ export function TaskRow({ item, onTick, onOpen }: { item: ItemView } & ItemActio
       <button type="button" className="label" aria-haspopup="dialog" onClick={() => onOpen(item.id)}>
         {label(item)}
       </button>
+      <Recurrence recurrence={item.recurrence} full />
       <Progress item={item} />
       {isDone && <small className="mute">{doneNote(item)}</small>}
     </li>

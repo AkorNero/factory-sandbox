@@ -6,3 +6,6 @@ export type { DayView, EventCard, ItemView, NowCard, StripDay } from './queries.
 export { addDays, dateOf, formatDuration, minutesOf, timeOf, today } from './dates.ts';
 export { SCHEMA, type ColumnType } from './schema.ts';
 export { checkEventTimes, parseEventInput, type ParsedEvent } from './event-input.ts';
+export { occurrenceDates, recurrenceLabel, weekdaysOf } from './recurrence.ts';
+export { occurrenceId, occurrenceSubtaskId } from './ids.ts';
+export { canRepeat, materialise } from './series.ts';

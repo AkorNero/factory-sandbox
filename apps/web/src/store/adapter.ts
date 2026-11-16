@@ -66,9 +66,17 @@ async function writeChanges(db: AbstractPowerSyncDatabase, changes: Changes) {
   });
 }
 
+/** Commands run one after another, so none reads the state while another is still writing. */
+let queue: Promise<unknown> = Promise.resolve();
+
 /** Run a command: read the state, let the core decide, write the changed rows in one local transaction. */
-export async function runCommand(db: AbstractPowerSyncDatabase, command: Command, now: Now): Promise<Changes> {
-  const changes = apply(await readState(db), command, now);
-  await writeChanges(db, changes);
-  return changes;
+export function runCommand(db: AbstractPowerSyncDatabase, command: Command, now: Now): Promise<Changes> {
+  const result = queue.then(async () => {
+    const changes = apply(await readState(db), command, now);
+    const empty = !changes.inserts.length && !changes.updates.length && !changes.deletes.length;
+    if (!empty) await writeChanges(db, changes);
+    return changes;
+  });
+  queue = result.catch(() => undefined);
+  return result;
 }

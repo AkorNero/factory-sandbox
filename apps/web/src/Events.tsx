@@ -5,10 +5,12 @@ import {
   type DayView,
   type EventCard,
   type NowCard,
+  type RecurrenceRule,
 } from '@dayplanner/core';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { eventDrop, somedayDrop, useDrag } from './drag.tsx';
-import { AddField, TaskRows, type ItemActions } from './Items.tsx';
+import { AddField, Recurrence, TaskRows, type ItemActions } from './Items.tsx';
+import { RepeatSection } from './Repeat.tsx';
 import './events.css';
 
 /** The Events part of Today: Now, Next, and the Later today / Earlier today tabs. No rules in here. */
@@ -28,10 +30,23 @@ function AddInEvent({ card, actions }: { card: { id: string; title: string }; ac
 
 const range = (e: { start: string; end: string }) => `${e.start}–${e.end}`;
 
-function EventButton({ card, open, className }: { card: { id: string; title: string }; open: Open; className?: string }) {
+/** The Event's title, opening its menu; a recurring Event carries ↻ (in full, "↻ daily", where `fullTag` is set). */
+function EventButton({
+  card,
+  open,
+  className,
+  fullTag,
+}: {
+  card: { id: string; title: string; recurrence: string | null };
+  open: Open;
+  className?: string;
+  fullTag?: boolean;
+}) {
   return (
     <button type="button" className={`ev-title ${className ?? ''}`} onClick={() => open(card.id)}>
       {card.title}
+      {card.recurrence !== null && ' '}
+      <Recurrence recurrence={card.recurrence} full={fullTag} />
     </button>
   );
 }
@@ -236,7 +251,7 @@ function Row({
     <div className={`ev-row ${past ? 'past' : ''}`} {...eventDrop(card.id)} {...drag}>
       <div className="ev-head">
         <div>
-          <EventButton card={card} open={actions.open} />
+          <EventButton card={card} open={actions.open} fullTag />
           <div className="mute">{sub}</div>
         </div>
         {right}
@@ -278,11 +293,19 @@ export function EventMenu({
   onClose,
   onSave,
   onDelete,
+  recurrence,
+  canRepeat,
+  onRepeat,
 }: {
   event: { id: string; title: string; start_time: string; end_time: string };
   onClose: () => void;
   onSave: (title: string, start: string, end: string) => Promise<unknown>;
   onDelete: () => Promise<unknown>;
+  /** The short name of its Recurrence; null for a one-off Event. */
+  recurrence: string | null;
+  /** The core says "Repeat…" is offered. */
+  canRepeat: boolean;
+  onRepeat: (rule: RecurrenceRule) => Promise<unknown>;
 }) {
   const [title, setTitle] = useState(event.title);
   const [start, setStart] = useState(event.start_time);
@@ -318,6 +341,14 @@ export function EventMenu({
             {error}
           </p>
         )}
+        <RepeatSection
+          recurrence={recurrence}
+          canRepeat={canRepeat}
+          onRepeat={async (rule) => {
+            await onRepeat(rule);
+            onClose();
+          }}
+        />
         <div className="actions">
           <button type="submit" className="primary">
             Save

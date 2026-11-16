@@ -1,3 +1,4 @@
+import { recurrenceLabel } from './recurrence.ts';
 import { addDays, dateOf, minutesOf, timeOf, today } from './dates.ts';
 import type { DateStr, EventRow, Now, State, TaskRow } from './types.ts';
 
@@ -10,6 +11,8 @@ export interface ItemView {
   subtasks: { done: number; total: number } | null;
   carriedOver: boolean;
   recurring: boolean;
+  /** The short name of its Recurrence, shown after ↻ ("daily", "Mon/Wed"); null when it does not recur. */
+  recurrence: string | null;
   /** A Task with no date: it is in Someday. */
   someday: boolean;
   /** 'HH:MM' of the Completion time, for done items. */
@@ -32,6 +35,8 @@ export interface StripDay {
 export interface EventCard {
   id: string;
   title: string;
+  /** Short name of its Recurrence, null for a one-off Event. */
+  recurrence: string | null;
   start: string;
   end: string;
   durationMinutes: number;
@@ -54,6 +59,7 @@ export interface EventCard {
 export interface NowCard {
   id: string;
   title: string;
+  recurrence: string | null;
   start: string;
   end: string;
   minutesLeft: number;
@@ -101,6 +107,7 @@ function eventSections(
   now: Now,
   placed: (eventId: string) => ItemView[],
   doneIn: (eventId: string) => ItemView[],
+  recurrence: (seriesId: string | null) => string | null,
   carriedOut: (eventId: string) => boolean,
 ) {
   const day = events.filter((e) => !e.deleted_at && e.date === date);
@@ -114,6 +121,7 @@ function eventSections(
   const card = (e: EventRow): EventCard => ({
     id: e.id,
     title: e.title,
+    recurrence: recurrence(e.series_id),
     start: e.start_time,
     end: e.end_time,
     durationMinutes: minutesOf(e.end_time) - minutesOf(e.start_time),
@@ -139,7 +147,7 @@ function eventSections(
       cards: live.map((e): NowCard => {
         const left = minutesOf(e.end_time) - nowMin;
         const length = minutesOf(e.end_time) - minutesOf(e.start_time);
-        return { id: e.id, title: e.title, start: e.start_time, end: e.end_time, minutesLeft: left, progress: 1 - left / length, ...placedCounts(placed(e.id)) };
+        return { id: e.id, title: e.title, recurrence: recurrence(e.series_id), start: e.start_time, end: e.end_time, minutesLeft: left, progress: 1 - left / length, ...placedCounts(placed(e.id)) };
       }),
     },
     next: nextStart ? { start: nextStart, startsInMinutes: minutesOf(nextStart) - nowMin, events: next.map(card) } : null,
@@ -184,6 +192,9 @@ function itemContext(state: State, now: Now) {
     placedIn(t)?.date ??
     (t.parent_id ? (t.completed_at ? dateOf(t.completed_at) : (byId.get(t.parent_id)?.date ?? null)) : t.date);
 
+  const seriesLabels = new Map(state.series.map((s) => [s.id, recurrenceLabel(s)]));
+  const recurrenceOf = (seriesId: string | null) => (seriesId ? (seriesLabels.get(seriesId) ?? null) : null);
+
   const subtasksOf = (id: string) => live.filter((t) => t.parent_id === id);
   /** A Task with Sub-tasks is done exactly when all of them are; nothing is stored on it. */
   const isDone = (t: TaskRow) => (subtasksOf(t.id).length ? subtasksOf(t.id).every((s) => s.completed_at) : !!t.completed_at);
@@ -196,12 +207,13 @@ function itemContext(state: State, now: Now) {
     subtasks: subtasksOf(t.id).length ? { done: subtasksOf(t.id).filter((s) => s.completed_at).length, total: subtasksOf(t.id).length } : null,
     carriedOver: t.carried_over,
     recurring: t.series_id !== null,
+    recurrence: recurrenceOf(t.series_id),
     someday: t.parent_id === null && t.date === null,
     completedTime: t.completed_at ? timeOf(t.completed_at) : null,
     placement: placedIn(t) ? { eventId: t.event_id!, title: placedIn(t)!.title } : null,
     doneIn: t.completed_at ? (doneInEvent(t, events)?.title ?? null) : null,
   });
-  return { live, byId, events, placedIn, effectiveDay, subtasksOf, isDone, toItem };
+  return { live, byId, events, placedIn, effectiveDay, subtasksOf, isDone, toItem, recurrenceOf };
 }
 
 /**
@@ -215,7 +227,7 @@ export function taskItem(state: State, id: string, now: Now): ItemView | undefin
 }
 
 export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateStr[] = []): DayView {
-  const { live, byId, events, placedIn, effectiveDay, isDone, toItem } = itemContext(state, now);
+  const { live, byId, events, placedIn, effectiveDay, isDone, toItem, recurrenceOf } = itemContext(state, now);
   /**
    * The items placed in an Event. Once the Event is in the past, the items Carry-over took out of it still count as
    * placed in it: that slot was missed, and they are not forgotten there.
@@ -269,7 +281,7 @@ export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateS
   return {
     date,
     isToday: date === dateOf(now),
-    ...eventSections(state.events, date, now, placed, doneHere, carriedOut),
+    ...eventSections(state.events, date, now, placed, doneHere, recurrenceOf, carriedOut),
     anytime: { count: anytime.length, items: anytime.map(toItem) },
     done: { count: done.length, total: dayTasks.length, items: done.map(toItem) },
     someday: { count: someday.length, items: someday.map(toItem) },

@@ -22,3 +22,20 @@ export function formatDuration(minutes: number): string {
   const m = minutes % 60;
   return h === 0 ? `${m}m` : m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
+
+const dayNumber = (date: DateStr): number => {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  return Math.round(Date.UTC(y, m - 1, d) / 86_400_000);
+};
+
+/** Days from `a` to `b` (negative when b is earlier). */
+export const daysBetween = (a: DateStr, b: DateStr): number => dayNumber(b) - dayNumber(a);
+
+/** ISO weekday: 1 = Monday ... 7 = Sunday. (Day 0 of the epoch, 1970-01-01, was a Thursday.) */
+export const isoWeekday = (date: DateStr): number => ((((dayNumber(date) + 3) % 7) + 7) % 7) + 1;
+
+/** Days in the month of a date. */
+export function daysInMonth(date: DateStr): number {
+  const [y, m] = date.split('-').map(Number) as [number, number];
+  return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
