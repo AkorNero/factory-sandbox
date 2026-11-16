@@ -32,7 +32,7 @@ export function NowAndNext({ view, open }: { view: DayView; open: Open }) {
         {cards.length > 1 && <h2 className="sec">{cards.length} Events at once</h2>}
         {!lead ? (
           <div className="card free">
-            <div className="label">Now</div>
+            <div className="ev-label">Now</div>
             <div className="big">Free</div>
             <p className="mute">No Event right now.</p>
           </div>
@@ -47,7 +47,7 @@ export function NowAndNext({ view, open }: { view: DayView; open: Open }) {
       </section>
       {view.next && (
         <section data-testid="next" aria-label="Next" className="card next">
-          <div className="label">
+          <div className="ev-label">
             Next · {view.next.start} (in {formatDuration(view.next.startsInMinutes)})
           </div>
           {view.next.events.map((e) => (
@@ -66,7 +66,7 @@ function NowCardView({ card, open, lead }: { card: NowCard; open: Open; lead: 'o
   const percent = Math.round(card.progress * 100);
   return (
     <div className={`now-card ${lead === 'also' ? 'also' : ''}`} data-testid="now-card">
-      <div className="label">
+      <div className="ev-label">
         {lead === 'also' ? 'Also now' : 'Now'} · {range(card)} · {card.minutesLeft} min left
       </div>
       <EventButton card={card} open={open} className="big" />
