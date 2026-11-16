@@ -107,7 +107,7 @@ test('press and hold starts a drag on a touch screen; moving first scrolls inste
   const end = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
 
   const cdp = await page.context().newCDPSession(page);
-  const touch = (type: string, p: { x: number; y: number } | null) =>
+  const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', p: { x: number; y: number } | null) =>
     cdp.send('Input.dispatchTouchEvent', { type, touchPoints: p ? [{ ...p, id: 1 }] : [] });
 
   // a quick swipe is a scroll: no drag, nothing placed
