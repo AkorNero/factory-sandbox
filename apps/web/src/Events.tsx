@@ -167,6 +167,7 @@ export function DayTabs({
                 key={e.id}
                 card={e}
                 actions={actions}
+                addTask
                 sub={range(e)}
                 right={e.startsInMinutes === null ? null : <span className="rel">in {formatDuration(e.startsInMinutes)}</span>}
               />
@@ -182,6 +183,7 @@ export function DayTabs({
                 card={e}
                 actions={actions}
                 past
+                addTask
                 sub={[range(e), formatDuration(e.durationMinutes), ...e.doneHere.map((t) => t.title)].join(' · ')}
                 right={<Outcome card={e} />}
               />
@@ -245,7 +247,7 @@ function Row({
   sub: string;
   right: ReactNode;
   past?: boolean;
-  /** Show the "+ Task in <Event>" field (the Events of a day opened from the strip). */
+  /** Show the "+ Task in <Event>" field: every Event card has one. */
   addTask?: boolean;
 }) {
   const drag = useDrag().dragProps({ kind: 'event', id: card.id, label: card.title });
