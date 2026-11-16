@@ -192,7 +192,7 @@ export function moveEvent(state: State, id: string, date: DateStr, now: Now): Ch
 
 export const subtasksOf = (state: State, id: string) => state.tasks.filter((t) => t.parent_id === id && !t.deleted_at);
 /** A Task with Sub-tasks is done exactly when all of them are; any other Task when it has a Completion time. */
-const isDone = (state: State, task: TaskRow) => {
+export const isDone = (state: State, task: TaskRow) => {
   const subs = subtasksOf(state, task.id);
   return subs.length ? subs.every((s) => s.completed_at) : !!task.completed_at;
 };

@@ -44,3 +44,26 @@ export function occurrenceDates(series: SeriesRow, from: DateStr, to: DateStr): 
   for (let d = first; d <= last; d = addDays(d, 1)) if (fallsOn(series, d)) dates.push(d);
   return dates;
 }
+
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
+
+/** The short name shown after ↻: "daily", "every 3 days", "weekdays", "Mon/Wed", "every 2 weeks · Mon", "monthly on the 31st". */
+export function recurrenceLabel(series: SeriesRow): string {
+  switch (series.rule) {
+    case 'every_n_days': {
+      const n = series.interval_n ?? 1;
+      return n === 1 ? 'daily' : `every ${n} days`;
+    }
+    case 'weekdays': {
+      const days = [...new Set(weekdaysOf(series))].sort();
+      const weeks = series.interval_n ?? 1;
+      const names = days.map((d) => DAY_NAMES[d - 1]).join('/');
+      if (weeks > 1) return `every ${weeks} weeks · ${names}`;
+      if (days.length === 7) return 'daily';
+      return days.join() === '1,2,3,4,5' ? 'weekdays' : names;
+    }
+    case 'day_of_month':
+      return `monthly on the ${ordinal(series.day_of_month ?? 1)}`;
+  }
+}
