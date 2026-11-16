@@ -10,6 +10,8 @@ export function apply(state: State, command: Command, now: Now): Changes {
       return tickTask(state, command.id, now);
     case 'untickTask':
       return untickTask(state, command.id, now);
+    case 'setCompletionTime':
+      return setCompletionTime(state, command.id, command.time, now);
   }
 }
 
@@ -57,6 +59,17 @@ function untickTask(state: State, id: string, now: Now): Changes {
   const task = liveTask(state, id);
   if (!task || !task.completed_at) return noChanges();
   return updateTask(id, { completed_at: null, updated_at: now });
+}
+
+const CLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Editing keeps the Completion time's date and UTC offset; only the clock time changes. */
+function setCompletionTime(state: State, id: string, time: string, now: Now): Changes {
+  const task = liveTask(state, id);
+  if (!task?.completed_at || !CLOCK_TIME.test(time)) return noChanges();
+  const completed = `${task.completed_at.slice(0, 11)}${time}:00${task.completed_at.slice(19)}`;
+  if (completed === task.completed_at) return noChanges();
+  return updateTask(id, { completed_at: completed, updated_at: now });
 }
 
 /** Apply changed rows to a state snapshot (used by tests, and by anything that wants the result in memory). */

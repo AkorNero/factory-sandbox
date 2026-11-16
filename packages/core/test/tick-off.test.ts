@@ -48,6 +48,43 @@ describe('ticking a Task off', () => {
   });
 });
 
+describe('editing a Completion time', () => {
+  const DONE_AT = '2026-11-16T09:40:00+01:00';
+
+  it('moves the done item to the new time on the same day, keeping the date and offset', () => {
+    const state = aState({
+      tasks: [
+        aTask({ id: 'a', title: 'Late tick', completed_at: '2026-11-16T10:10:00+01:00' }),
+        aTask({ id: 'b', title: 'Earlier', completed_at: DONE_AT }),
+      ],
+    });
+
+    const changes = apply(state, { type: 'setCompletionTime', id: 'a', time: '07:30' }, MON_10_15);
+    const after = applyChanges(state, changes);
+
+    expect(changes.updates).toEqual([
+      { table: 'tasks', id: 'a', set: { completed_at: '2026-11-16T07:30:00+01:00', updated_at: MON_10_15 } },
+    ]);
+    const done = dayView(after, TODAY, MON_10_15).done.items;
+    expect(done.map((i) => [i.title, i.completedTime])).toEqual([
+      ['Earlier', '09:40'],
+      ['Late tick', '07:30'],
+    ]);
+  });
+
+  it.each(['', '7:30', '25:00', '09:61', 'noon'])('rejects the invalid time %j', (time) => {
+    const state = aState({ tasks: [aTask({ id: 'a', completed_at: DONE_AT })] });
+
+    expect(apply(state, { type: 'setCompletionTime', id: 'a', time }, MON_10_15).updates).toEqual([]);
+  });
+
+  it('does not tick a Task that is not done', () => {
+    const state = aState({ tasks: [aTask({ id: 'a' })] });
+
+    expect(apply(state, { type: 'setCompletionTime', id: 'a', time: '08:00' }, MON_10_15).updates).toEqual([]);
+  });
+});
+
 describe('unticking a Task', () => {
   const DONE_AT = '2026-11-16T09:40:00+01:00';
 
