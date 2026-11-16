@@ -173,9 +173,14 @@ function itemContext(state: State, now: Now) {
   const events = new Map(state.events.filter((e) => !e.deleted_at).map((e) => [e.id, e]));
   /** The Event a Task is placed in; a Placement that points at a missing Event counts as Unplaced. */
   const placedIn = (t: TaskRow) => (t.event_id ? events.get(t.event_id) : undefined);
-  /** An item's effective day: its Event's date if placed, else its own date (Task) or its parent's day (Sub-task). */
+  /**
+   * An item's effective day: its Event's date if placed, else its own date (Task) or its parent's day (Sub-task).
+   * A done Sub-task without a Placement stays on the day it was done, so its parent moving on (Carry-over) does not
+   * drag finished work to another day.
+   */
   const effectiveDay = (t: TaskRow): DateStr | null =>
-    placedIn(t)?.date ?? (t.parent_id ? (byId.get(t.parent_id)?.date ?? null) : t.date);
+    placedIn(t)?.date ??
+    (t.parent_id ? (t.completed_at ? dateOf(t.completed_at) : (byId.get(t.parent_id)?.date ?? null)) : t.date);
 
   const subtasksOf = (id: string) => live.filter((t) => t.parent_id === id);
   /** A Task with Sub-tasks is done exactly when all of them are; nothing is stored on it. */
