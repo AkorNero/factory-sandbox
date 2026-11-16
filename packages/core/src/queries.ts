@@ -76,6 +76,11 @@ export interface DayView {
 
 const STRIP_DAYS = 8; // today and the next 7
 
+const isDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && addDays(d, 0) === d;
+
+/** Whether a day can be picked onto the strip: a real date after the 7 days it already shows. */
+export const canPickDay = (now: Now, date: string): boolean => isDate(date) && date >= addDays(today(now), STRIP_DAYS);
+
 const placedCounts = (tasks: ItemView[]) => ({
   tasks,
   placedDone: tasks.filter((t) => t.completedTime).length,
@@ -145,8 +150,11 @@ function doneInEvent(task: TaskRow, events: Map<string, EventRow>): EventRow | u
     .sort((a, b) => b.start_time.localeCompare(a.start_time) || b.end_time.localeCompare(a.end_time) || b.id.localeCompare(a.id))[0];
 }
 
-/** Everything the screen shows for one day. State, a date and "now" in; a view out. Nothing here is stored. */
-export function dayView(state: State, date: DateStr, now: Now): DayView {
+/**
+ * Everything the screen shows for one day. State, a date and "now" in; a view out. Nothing here is stored.
+ * `pickedDays` are the later days the user added to the strip with "Pick a day".
+ */
+export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateStr[] = []): DayView {
   const live = state.tasks.filter((t) => !t.deleted_at);
   const byId = new Map(live.map((t) => [t.id, t]));
   const events = new Map(state.events.filter((e) => !e.deleted_at).map((e) => [e.id, e]));
@@ -190,8 +198,9 @@ export function dayView(state: State, date: DateStr, now: Now): DayView {
   const someday = live.filter((t) => t.parent_id === null && t.date === null && !t.completed_at).sort((a, b) => a.position - b.position);
 
   const start = today(now);
-  const strip: StripDay[] = Array.from({ length: STRIP_DAYS }, (_, i) => {
-    const d = addDays(start, i);
+  const picked = [...new Set(pickedDays.filter((d) => canPickDay(now, d)))].sort();
+  const stripDates = [...Array.from({ length: STRIP_DAYS }, (_, i) => addDays(start, i)), ...picked];
+  const strip: StripDay[] = stripDates.map((d) => {
     return {
       date: d,
       events: state.events.filter((e) => !e.deleted_at && e.date === d).length,
