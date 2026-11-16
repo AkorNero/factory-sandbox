@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 
 /**
- * Drag a Task onto an Event. Mouse: the drag starts once the pointer has moved a few pixels.
+ * Drag a Task onto an Event, a day chip or Anytime, or an Event onto a day chip. Mouse: the drag starts once the pointer has moved a few pixels.
  * Touch: press and hold starts it; a finger that moves before the hold is up is a scroll and the page scrolls normally.
  * No rules in here: the core is asked whether a drop is allowed, and told what was dropped.
  *
@@ -14,9 +14,22 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type P
  */
 
 export interface DragSource {
+  /** A Task (the default) or an Event. */
+  kind?: 'task' | 'event';
   id: string;
   label: string;
 }
+
+/** What a drop target is: an Event, a day chip, or the Anytime block of the day shown. */
+export type DropTarget = { kind: 'event'; id: string } | { kind: 'day'; date: string } | { kind: 'anytime' };
+
+/** The `data-drop` value of a target, and back. */
+export const parseDrop = (value: string): DropTarget | null => {
+  if (value === 'anytime') return { kind: 'anytime' };
+  if (value.startsWith('event:')) return { kind: 'event', id: value.slice(6) };
+  if (value.startsWith('day:')) return { kind: 'day', date: value.slice(4) };
+  return null;
+};
 
 interface Dragger {
   /** Spread on the element that can be picked up. */
@@ -33,8 +46,10 @@ const DragContext = createContext<Dragger>({
 });
 export const useDrag = () => useContext(DragContext);
 
-/** Mark an element as a drop target for an Event. The id is what `onDrop` gets back. */
-export const eventDrop = (eventId: string) => ({ 'data-drop': eventId });
+/** Mark an element as a drop target. What `onDrop` gets back is the parsed target. */
+export const eventDrop = (eventId: string) => ({ 'data-drop': `event:${eventId}` });
+export const dayDrop = (date: string) => ({ 'data-drop': `day:${date}` });
+export const anytimeDrop = { 'data-drop': 'anytime' };
 
 interface Press {
   source: DragSource;
@@ -52,14 +67,14 @@ export function DragProvider({
   onDrop,
   children,
 }: {
-  canDrop: (source: DragSource, eventId: string) => boolean;
-  onDrop: (source: DragSource, eventId: string) => void;
+  canDrop: (source: DragSource, target: DropTarget) => boolean;
+  onDrop: (source: DragSource, target: DropTarget) => void;
   children: ReactNode;
 }) {
   const latest = useRef({ canDrop, onDrop });
   latest.current = { canDrop, onDrop };
   const press = useRef<Press | null>(null);
-  const [ghost, setGhost] = useState<{ label: string; x: number; y: number } | null>(null);
+  const [ghost, setGhost] = useState<{ kind?: 'task' | 'event'; label: string; x: number; y: number } | null>(null);
 
   const clearMarks = () => {
     delete document.body.dataset.dragging;
@@ -88,9 +103,10 @@ export function DragProvider({
     navigator.vibrate?.(15);
     document.body.dataset.dragging = 'true';
     for (const el of document.querySelectorAll<HTMLElement>('[data-drop]')) {
-      if (latest.current.canDrop(p.source, el.dataset.drop!)) el.dataset.dropValid = 'true';
+      const target = parseDrop(el.dataset.drop!);
+      if (target && latest.current.canDrop(p.source, target)) el.dataset.dropValid = 'true';
     }
-    setGhost({ label: p.source.label, x, y });
+    setGhost({ kind: p.source.kind, label: p.source.label, x, y });
   };
 
   const hover = (x: number, y: number) => {
@@ -120,7 +136,7 @@ export function DragProvider({
     if (!p || e.pointerId !== p.pointerId) return;
     if (p.active) {
       hover(e.clientX, e.clientY);
-      const target = p.over?.dataset.drop;
+      const target = p.over ? parseDrop(p.over.dataset.drop!) : null;
       // the click that follows the release would open the tap menu of whatever is under the pointer
       const swallow = (ev: Event) => ev.stopPropagation();
       window.addEventListener('click', swallow, true);
@@ -189,7 +205,7 @@ export function DragProvider({
       {children}
       {ghost && (
         <div className="ghost" aria-hidden="true" style={{ transform: `translate(${ghost.x + 12}px, ${ghost.y + 12}px)` }}>
-          ○ {ghost.label}
+          {ghost.kind === 'event' ? '▪' : '○'} {ghost.label}
         </div>
       )}
     </DragContext.Provider>

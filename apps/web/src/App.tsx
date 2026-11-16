@@ -1,10 +1,23 @@
-import { canPlace, dayView, today, type Command, type DayView, type ItemView, type StripDay } from '@dayplanner/core';
+import {
+  addDays,
+  canDateTask,
+  canMoveEvent,
+  canPickDay,
+  canPlace,
+  dayView,
+  today,
+  type Command,
+  type DayView,
+  type ItemView,
+  type State,
+  type StripDay,
+} from '@dayplanner/core';
 import { useStatus } from '@powersync/react';
 import type { AbstractPowerSyncDatabase } from '@powersync/web';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { Clock } from './clock.ts';
-import { DragProvider, type DragSource } from './drag.tsx';
-import { DayTabs, EventMenu, NowAndNext, type EventActions } from './Events.tsx';
+import { anytimeDrop, dayDrop, DragProvider, type DragSource, type DropTarget } from './drag.tsx';
+import { DayEvents, DayTabs, EventMenu, NowAndNext, type EventActions } from './Events.tsx';
 import { AddField, Pill, label, type ItemActions } from './Items.tsx';
 import { runCommand, useStoreState } from './store/adapter.ts';
 
@@ -17,8 +30,13 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
   const [now, setNow] = useState(() => clock.now());
   useEffect(() => clock.subscribe(() => setNow(clock.now())), [clock]);
 
-  const date = today(now);
-  const view = useMemo(() => (state ? dayView(state, date, now) : null), [state, date, now]);
+  const todayDate = today(now);
+  // the day opened from the strip; Today until one is tapped (a day that has passed falls back to Today)
+  const [opened, setOpened] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
+  const date = opened && opened > todayDate ? opened : todayDate;
+  const view = useMemo(() => (state ? dayView(state, date, now, picked) : null), [state, date, now, picked]);
+  const dayLabel = (d: string) => fmt(d, { weekday: 'short', day: 'numeric', month: 'short' });
 
   const [eventMenuId, setEventMenuId] = useState<string | null>(null);
   const menuEvent = state?.events.find((e) => e.id === eventMenuId) ?? null;
@@ -46,10 +64,20 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
 
   return (
     <DragProvider
-      canDrop={(source, eventId) => !!state && canPlace(state, source.id, eventId)}
-      onDrop={async (source: DragSource, eventId) => {
-        await run({ type: 'placeTask', id: source.id, eventId });
-        setToast(`Placed “${source.label}” in ${eventTitle(eventId)}`);
+      canDrop={(source, target) => !!state && canDrop(state, date, source, target)}
+      onDrop={async (source: DragSource, target: DropTarget) => {
+        if (source.kind === 'event') {
+          if (target.kind !== 'day') return;
+          await run({ type: 'moveEvent', id: source.id, date: target.date });
+          setToast(`Moved “${source.label}” to ${dayLabel(target.date)} with its placed Tasks`);
+        } else if (target.kind === 'event') {
+          await run({ type: 'placeTask', id: source.id, eventId: target.id });
+          setToast(`Placed “${source.label}” in ${eventTitle(target.id)}`);
+        } else {
+          const to = target.kind === 'day' ? target.date : date;
+          await run({ type: 'dateTask', id: source.id, date: to });
+          setToast(`Dated “${source.label}” to ${dayLabel(to)}`);
+        }
       }}
     >
       <main className="main">
@@ -59,21 +87,44 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
         </header>
         {view && (
           <>
-            <Strip days={view.strip} selected={view.date} />
-            <NowAndNext view={view} actions={actions} />
+            <Strip
+              days={view.strip}
+              selected={view.date}
+              now={now}
+              onOpen={(d) => setOpened(d === todayDate ? null : d)}
+              onPick={(d) => {
+                setPicked((p) => (p.includes(d) ? p : [...p, d]));
+                setOpened(d);
+              }}
+              onRemove={(d) => {
+                setPicked((p) => p.filter((x) => x !== d));
+                if (opened === d) setOpened(null);
+              }}
+            />
+            {view.isToday && <NowAndNext view={view} actions={actions} />}
+            {!view.isToday && (
+              <DayEvents
+                view={view}
+                actions={actions}
+                onAdd={(title, start, end) => run({ type: 'addEvent', id: crypto.randomUUID(), title, date, start, end })}
+              />
+            )}
             <Anytime
               view={view}
+              dayName={fmt(date, { weekday: 'short' })}
               onAdd={(title) => run({ type: 'addTask', id: crypto.randomUUID(), title, date })}
               onTick={tick}
               onOpen={setMenuId}
             />
             <DoneToday view={view} onTick={tick} onOpen={setMenuId} />
             {menuItem && <TaskMenu item={menuItem} onClose={() => setMenuId(null)} run={run} />}
-            <DayTabs
-              view={view}
-              actions={actions}
-              onAdd={(title, start, end) => run({ type: 'addEvent', id: crypto.randomUUID(), title, date, start, end })}
-            />
+            {view.isToday && (
+              <DayTabs
+                view={view}
+                actions={actions}
+                onAdd={(title, start, end) => run({ type: 'addEvent', id: crypto.randomUUID(), title, date, start, end })}
+              />
+            )}
           </>
         )}
         {menuEvent && (
@@ -118,20 +169,88 @@ function SyncBadge() {
   );
 }
 
-function Strip({ days, selected }: { days: StripDay[]; selected: string }) {
+/** Whether a drop is allowed, asked of the core. A drop on Anytime means "the day shown". */
+function canDrop(state: State, shown: string, source: DragSource, target: DropTarget): boolean {
+  if (source.kind === 'event') return target.kind === 'day' && canMoveEvent(state, source.id, target.date);
+  switch (target.kind) {
+    case 'event':
+      return canPlace(state, source.id, target.id);
+    case 'day':
+      return canDateTask(state, source.id, target.date);
+    case 'anytime':
+      return canDateTask(state, source.id, shown);
+  }
+}
+
+/** Today and the next 7 days, plus the days picked later. "Pick a day" sits after the strip, outside its scroll area. */
+function Strip({
+  days,
+  selected,
+  now,
+  onOpen,
+  onPick,
+  onRemove,
+}: {
+  days: StripDay[];
+  selected: string;
+  now: string;
+  onOpen: (date: string) => void;
+  onPick: (date: string) => void;
+  onRemove: (date: string) => void;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const firstPickable = addDays(today(now), 8);
   return (
-    <nav className="strip" aria-label="Upcoming">
-      {days.map((d, i) => (
-        <div key={d.date} className={`chip ${d.date === selected ? 'sel' : ''}`}>
-          <span className="wd">{i === 0 ? 'Today' : fmt(d.date, { weekday: 'short' })}</span>
-          <span className="dn">{fmt(d.date, { day: 'numeric' })}</span>
-          <span className="dots" aria-label={`${d.events} events, ${d.tasks} tasks`}>
-            {'▪'.repeat(Math.min(d.events, 4))}
-            {'•'.repeat(Math.min(d.tasks, 4))}
-          </span>
-        </div>
-      ))}
-    </nav>
+    <div className="stripbar">
+      <nav className="strip" aria-label="Upcoming">
+        {days.map((d, i) => (
+          <div key={d.date} className="chipwrap">
+            <button
+              type="button"
+              className={`chip ${d.date === selected ? 'sel' : ''}`}
+              aria-pressed={d.date === selected}
+              aria-label={`${i === 0 ? 'Today' : fmt(d.date, { weekday: 'long' })} ${fmt(d.date, { day: 'numeric', month: 'long' })}`}
+              onClick={() => onOpen(d.date)}
+              {...dayDrop(d.date)}
+            >
+              <span className="wd">{i === 0 ? 'Today' : fmt(d.date, { weekday: 'short' })}</span>
+              <span className="dn">{fmt(d.date, { day: 'numeric' })}</span>
+              <span className="dots" aria-label={`${d.events} events, ${d.tasks} tasks`}>
+                {'▪'.repeat(Math.min(d.events, 4))}
+                {'•'.repeat(Math.min(d.tasks, 4))}
+              </span>
+            </button>
+            {canPickDay(now, d.date) && (
+              <button type="button" className="chip-x" aria-label={`Remove ${fmt(d.date, { day: 'numeric', month: 'long' })}`} onClick={() => onRemove(d.date)}>
+                ✕
+              </button>
+            )}
+          </div>
+        ))}
+      </nav>
+      <button
+        type="button"
+        className="pick"
+        onClick={() => {
+          try {
+            input.current?.showPicker();
+          } catch {
+            input.current?.focus();
+          }
+        }}
+      >
+        <span aria-hidden="true">📅</span> Pick a day
+      </button>
+      <input
+        ref={input}
+        type="date"
+        className="pick-input"
+        aria-label="Day to add to the strip"
+        min={firstPickable}
+        value=""
+        onChange={(e) => canPickDay(now, e.target.value) && onPick(e.target.value)}
+      />
+    </div>
   );
 }
 
@@ -159,14 +278,20 @@ function Collapsible({ items, limit, ...actions }: { items: ItemView[]; limit: n
   );
 }
 
-function Anytime({ view, onAdd, ...actions }: { view: DayView; onAdd: (title: string) => Promise<unknown> } & ItemActions) {
+/** Anytime today; on another day the same block is "Not placed". A drop here dates a Task to the day shown. */
+function Anytime({
+  view,
+  dayName,
+  onAdd,
+  ...actions
+}: { view: DayView; dayName: string; onAdd: (title: string) => Promise<unknown> } & ItemActions) {
   return (
-    <section aria-labelledby="anytime-h">
+    <section aria-labelledby="anytime-h" className="anytime" {...anytimeDrop}>
       <h2 id="anytime-h" className="sec">
-        Anytime today <span className="count" data-testid="anytime-count">{view.anytime.count}</span>
+        {view.isToday ? 'Anytime today' : 'Not placed'} <span className="count" data-testid="anytime-count">{view.anytime.count}</span>
       </h2>
       <Collapsible items={view.anytime.items} limit={ANYTIME_SHOWN} {...actions} />
-      <AddField placeholder="+ Task today" onAdd={onAdd} />
+      <AddField placeholder={view.isToday ? '+ Task today' : `+ Task on ${dayName}`} onAdd={onAdd} />
     </section>
   );
 }
@@ -177,7 +302,7 @@ function DoneToday({ view, ...actions }: { view: DayView } & ItemActions) {
   return (
     <section aria-labelledby="done-h">
       <h2 id="done-h" className="sec">
-        Done today <span className="count">{count}</span>
+        {view.isToday ? 'Done today' : 'Done'} <span className="count">{count}</span>
       </h2>
       <div className="meter" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={count}>
         <div style={{ width: `${(count / total) * 100}%` }} />

@@ -286,3 +286,67 @@ h1 {
   margin-left: auto;
   color: #c0392b;
 }
+
+/* Upcoming strip: chips are buttons, each a drop target; "Pick a day" sits outside the scrolling part. */
+.stripbar {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  position: relative;
+}
+.strip {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 8px 4px 0;
+}
+.chipwrap {
+  position: relative;
+  display: flex;
+  flex: none;
+}
+button.chip {
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  min-height: 74px;
+}
+button.chip.sel {
+  color: var(--bg);
+}
+.chip-x {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--mute);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+.pick {
+  flex: none;
+  width: 58px;
+  margin-top: 8px;
+  margin-bottom: 4px;
+  border: 1px dashed var(--mute);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.pick-input {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
