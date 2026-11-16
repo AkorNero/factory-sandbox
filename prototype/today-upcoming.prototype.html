@@ -91,7 +91,7 @@
   .b-drawer .row.ghost{color:var(--ghost);font-style:italic}
 
   /* ---------- Variant C: Now / Next ---------- */
-  .c-strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px}
+  .c-strip{display:flex;gap:8px;overflow-x:auto;padding:7px 7px 6px 0;margin-bottom:14px}
   .c-chip{flex:none;min-width:66px;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:6px 8px;text-align:center}
   .c-chip.sel{background:var(--ink);color:var(--bg);border-color:var(--ink)}
   .c-chip .n{font-size:20px;font-weight:700;line-height:1.1}
@@ -148,7 +148,22 @@
   .seg{display:flex;background:var(--line);border-radius:12px;padding:3px;gap:3px;margin:4px 0 10px}
   .seg button{flex:1;border:0;background:none;border-radius:9px;padding:7px 4px;font-size:14px;color:var(--mute)}
   .seg button.on{background:var(--card);color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.1)}
-  .seg .n{font-size:11.5px;color:var(--mute);font-weight:400}
+  .seg button{display:flex;align-items:center;justify-content:center;gap:6px}
+  .seg .n{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;min-width:20px;height:18px;line-height:18px;padding:0 6px;border-radius:9px;background:rgba(127,127,127,.15);color:var(--mute)}
+  .seg button.on .n{background:var(--accent);color:#fff}
+  .seg .sd-ic{font-size:11px;opacity:.7;display:none}
+  .seg button.sd.on{font-style:italic}
+  .tab-body.sd{border-style:dashed;background:transparent}
+  .sd-note{font-size:12px;color:var(--mute);font-style:italic;padding:6px 0 2px}
+  .cnt{display:inline-block;font-size:10.5px;font-weight:600;min-width:18px;height:16px;line-height:16px;padding:0 5px;border-radius:8px;background:var(--line);text-align:center;letter-spacing:0;margin-left:4px}
+  .c-more{border:1px dashed var(--line);background:none;border-radius:20px;padding:5px 12px;font-size:13.5px;color:var(--accent)}
+  .c-chip{position:relative}
+  .c-stripwrap{display:flex;gap:8px;align-items:stretch;margin-bottom:14px}
+  .c-stripwrap .c-strip{flex:1;min-width:0;margin-bottom:0}
+  .c-pick{position:relative;flex:none;width:58px;margin:7px 0 6px;border:1px dashed var(--mute);background:none;border-radius:12px;font-size:10.5px;line-height:1.2;color:var(--mute);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+  .c-pick .ic{font-size:16px}
+  .c-pick input{position:absolute;inset:0;opacity:0;pointer-events:none;width:100%;height:100%}
+  .c-chip .x{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:var(--ink);color:var(--bg);font-size:10px;line-height:18px}
   .tab-body{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:6px 14px;min-height:120px}
   .tab-row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
   .tab-row:last-child{border-bottom:0}
@@ -186,6 +201,7 @@
   <span class="sep"></span>
   <button data-act="phone" title="Toggle phone-width frame">📱</button>
   <button data-act="state" title="Show state">{ }</button>
+  <button data-act="pile" title="Add 3 open and 3 done Tasks today, to test long lists">+6 Tasks</button>
   <button data-act="reset" title="Reset sample data">↺</button>
 </div>
 
@@ -246,6 +262,13 @@ function reset() {
   tk('Water plants', 0, { recurId: 'plants', carried: 2 }); // occurrence from day -2, still unfinished
   tk('Submit expense claim', 1); tk('Renew passport form', 3); tk('Call grandma', 6); tk('Pack for Lisbon', 8);
   ['Learn Spanish basics', 'Fix bike light', 'Sort photos', 'Research new laptop'].forEach(t => tk(t, null));
+}
+const PILE = ['Book car service', 'Email accountant', 'Order printer ink', 'Plan weekend', 'Cancel old gym', 'Update CV', 'Back up phone', 'Clean desk', 'Buy birthday card', 'Check bank statement', 'Read chapter 4', 'Tidy downloads'];
+function pile() {
+  for (let i = 0; i < 6; i++) {
+    const title = PILE[(S.tasks.length + i) % PILE.length];
+    S.tasks.push({ id: 't' + nid++, title, date: S.day, eventId: null, done: i % 2 ? Math.max(420, S.time - 20 * i) : null, carried: 0, parentId: null, recurId: null, skipped: false });
+  }
 }
 function materializeEvents(from, to) {
   for (let d = Math.max(from, S.maxEvDay + 1); d <= to; d++)
@@ -387,13 +410,22 @@ function VariantB() {
 const dur = m => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ' ' + (m % 60) + 'm' : ''}` : `${m}m`;
 function cStrip(d, withSomeday) {
   const days = [d, ...upcomingDays()];
-  return `<div class="c-strip">${days.map(x => {
+  return `<div class="c-stripwrap"><div class="c-strip">${days.map(x => {
     const n = eventsOn(x).length, t = topTasksOn(x).filter(isOpen).length + ghostsOn(x).length;
     return `<button class="c-chip ${x === S.selDay ? 'sel' : ''}" data-sel="${x}"><div class="w">${x === d ? 'Today' : fmtDay(x, { weekday: 'short' })}</div><div class="n">${dateOf(x).getDate()}</div><div class="dots">${'▪'.repeat(Math.min(n, 4))}${'•'.repeat(Math.min(t, 4))}</div></button>`;
-  }).join('')}${withSomeday ? `<button class="c-chip someday-chip ${S.selDay === 'S' ? 'sel' : ''}" data-sel="S"><div class="w">Someday</div><div class="n">${someday().length}</div><div class="dots">no date</div></button>` : ''}<span style="align-self:center" class="small mute">▪ Event • Task</span></div>`;
+  }).join('')}${withSomeday ? `<button class="c-chip someday-chip ${S.selDay === 'S' ? 'sel' : ''}" data-sel="S"><div class="w">Someday</div><div class="n">${someday().length}</div><div class="dots">no date</div></button>` : ''}${pickedChip(d)}</div>${pickBtn(d)}</div>`;
+}
+/* "Open another day": a chip at the end of the strip that opens the date picker, limited to days after the 7 shown.
+   The picked day shows up as its own chip (with ✕ to drop it), so the strip stays the one way to move between days. */
+function pickedChip(d) {
+  return S.extraDay !== null && S.extraDay > d + 7 ? `<button class="c-chip picked ${S.selDay === S.extraDay ? 'sel' : ''}" data-sel="${S.extraDay}"><div class="w">${fmtDay(S.extraDay, { weekday: 'short' })}</div><div class="n">${dateOf(S.extraDay).getDate()}</div><div class="dots">${fmtDay(S.extraDay, { month: 'short' })}</div><span class="x" data-act="unpick" title="Remove">✕</span></button>` : '';
+}
+function pickBtn(d) {
+  const min = dateOf(d + 8), iso = x => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  return `<button class="c-pick" data-act="pick" title="Open a day after ${fmtDay(d + 7)}"><span class="ic">📅</span><span>Pick<br>a day</span><input type="date" id="pickday" data-act="openday" min="${iso(min)}" tabindex="-1"></button>`;
 }
 function cOtherDay(d) {
-  return `<div class="c-other"><h2 style="margin-bottom:6px">${fmtDay(d, { weekday: 'long', day: 'numeric', month: 'long' })}</h2>${dayRows(d, 'c-r')}${openDayInput()}</div>`;
+  return `<div class="c-other"><h2 style="margin-bottom:6px">${fmtDay(d, { weekday: 'long', day: 'numeric', month: 'long' })}</h2>${dayRows(d, 'c-r')}</div>`;
 }
 function cTop(d) {
   const evs = eventsOn(d);
@@ -409,9 +441,16 @@ function cTop(d) {
     html += live.length > 1 ? `<div class="c-sec">${live.length} Events at once</div><div class="c-live">${live.map(card).join('')}</div>` : card(live[0], 0);
   } else html += `<div class="c-now" style="background:var(--card);color:var(--ink);border:1px solid var(--line)"><div class="lbl">Now</div><h2>Free</h2><div class="mute">No Event right now — pick something from Anytime.</div></div>`;
   if (nexts.length) html += `<div class="c-next"><div class="lbl">Next · ${hm(nextAt)} (in ${dur(nextAt - S.time)})</div>${nexts.map(next => `<h3 style="margin:2px 0 4px">${esc(next.title)}</h3>${placedIn(next.id).map(t => item(t, { ctx: parentCtx(t) })).join('')}`).join('')}</div>`;
-  const anytime = unplacedOn(d).flatMap(t => subsOf(t.id).length ? subsOf(t.id).filter(s => !s.eventId).map(s => ({ t: s, ctx: S.tasks.find(p => p.id === s.parentId).title })) : [{ t }]);
-  html += `<div class="c-sec">Anytime today</div><div class="c-pills">${anytime.map(({ t, ctx }) => `<span class="c-pill ${t.done ? 'done' : ''} ${t.carried && isOpen(t) ? 'carry' : ''}"><button class="tick" data-tick="${t.id}">${t.done ? '✓' : ''}</button>${esc(t.title)}${ctx ? ` <span class="ctx">· ${esc(ctx)}</span>` : ''}${t.recurId ? ' <span class="badge recur">↻</span>' : ''}${t.carried && isOpen(t) ? ` <span class="badge carry">↪${t.carried}d</span>` : ''}</span>`).join('')}</div>`;
+  const anytime = unplacedOn(d).flatMap(t => subsOf(t.id).length ? subsOf(t.id).filter(s => !s.eventId).map(s => ({ t: s, ctx: S.tasks.find(p => p.id === s.parentId).title })) : [{ t }])
+    .filter(({ t }) => isOpen(t)).sort((a, b) => (b.t.carried > 0) - (a.t.carried > 0)); // done ones move to Done today; carried first
+  const [shown, more] = capped(anytime, 6, 'moreAny');
+  html += `<div class="c-sec">Anytime today <span class="cnt">${anytime.length}</span></div><div class="c-pills">${shown.map(({ t, ctx }) => `<span class="c-pill ${t.done ? 'done' : ''} ${t.carried && isOpen(t) ? 'carry' : ''}"><button class="tick" data-tick="${t.id}">${t.done ? '✓' : ''}</button>${esc(t.title)}${ctx ? ` <span class="ctx">· ${esc(ctx)}</span>` : ''}${t.recurId ? ' <span class="badge recur">↻</span>' : ''}${t.carried && isOpen(t) ? ` <span class="badge carry">↪${t.carried}d</span>` : ''}</span>`).join('')}${more}</div>`;
   return { html, nexts, later: evs.filter(e => e.start > S.time && !nexts.includes(e)), past: evs.filter(e => e.end <= S.time) };
+}
+function capped(list, n, key) {
+  if (list.length <= n) return [list, ''];
+  return S[key] ? [list, `<button class="c-more" data-act="more" data-k="${key}">Show less</button>`]
+                : [list.slice(0, n), `<button class="c-more" data-act="more" data-k="${key}">+${list.length - n} more</button>`];
 }
 const doneToday = d => S.tasks.filter(t => t.date === d && t.done && !subsOf(t.id).length).sort((a, b) => a.done - b.done);
 const doneWhere = t => { const p = t.eventId && evById(t.eventId); return p && p.start <= t.done && t.done < p.end ? p : eventAt(t.date, t.done); };
@@ -486,9 +525,9 @@ function cMix(doneFirst) {
     return `<div class="tab-row past"><div><b>${esc(e.title)}</b>${e.recurId ? ' ↻' : ''}<div class="small mute">${hm(e.start)}–${hm(e.end)} · ${dur(e.end - e.start)}${inside.length ? ' · ' + inside.map(t => esc(t.title)).join(', ') : ''}</div></div><span class="rel ${its.length && got < its.length ? 'warn' : 'ok'}">${its.length ? `${got}/${its.length} done` : `ended ${dur(S.time - e.end)} ago`}</span></div>`;
   }).join('') || '<div class="mute small" style="padding:8px 0">no Events finished yet</div>';
   if (tab === 'someday') body = someday().map(t => item(t)).join('');
-  const doneSec = `<div class="c-sec">Done today</div><div class="meter"><i style="width:${total ? Math.round(100 * done.length / total) : 0}%"></i></div><div class="small mute" style="margin:4px 0 8px">${done.length} of ${total} done</div>
-    <div class="c-pills">${done.map(t => `<span class="c-pill done"><button class="tick" data-tick="${t.id}">✓</button>${esc(t.title)} <span class="ctx">${hm(t.done)}${doneWhere(t) ? ' · ' + esc(doneWhere(t).title) : ''}</span></span>`).join('') || '<span class="mute small">nothing yet</span>'}</div>`;
-  const tabsHtml = `<div class="seg">${tabs.map(([k, l, n]) => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${l} <span class="n">${n}</span></button>`).join('')}</div><div class="tab-body">${body}</div>`;
+  const doneSec = `<div class="c-sec">Done today <span class="cnt">${done.length}</span></div><div class="meter"><i style="width:${total ? Math.round(100 * done.length / total) : 0}%"></i></div><div class="small mute" style="margin:4px 0 8px">${done.length} of ${total} done</div>
+    <div class="c-pills">${capped([...done].reverse(), 4, 'moreDone')[0].map(t => `<span class="c-pill done"><button class="tick" data-tick="${t.id}">✓</button>${esc(t.title)} <span class="ctx">${hm(t.done)}${doneWhere(t) ? ' · ' + esc(doneWhere(t).title) : ''}</span></span>`).join('') || '<span class="mute small">nothing yet</span>'}${capped(done, 4, 'moreDone')[1]}</div>`;
+  const tabsHtml = `<div class="seg">${tabs.map(([k, l, n]) => `<button class="${k === tab ? 'on' : ''} ${k === 'someday' ? 'sd' : ''}" data-tab="${k}">${k === 'someday' ? '<span class="sd-ic">○</span>' : ''}${l}<span class="n">${n}</span></button>`).join('')}</div><div class="tab-body ${tab === 'someday' ? 'sd' : ''}">${tab === 'someday' ? '<div class="sd-note">Tasks with no date</div>' : ''}${body}</div>`;
   return `<div class="c-main">${cStrip(d)}${banner()}${top}${doneFirst ? doneSec + tabsHtml : tabsHtml + '<div style="height:6px"></div>' + doneSec}</div>`;
 }
 const VariantC4 = () => cMix(true), VariantC5 = () => cMix(false);
@@ -514,6 +553,7 @@ function render() {
 }
 document.addEventListener('click', e => {
   const tk = e.target.closest('[data-tick]'); if (tk) { tick(tk.dataset.tick); return render(); }
+  if (e.target.closest('[data-act=unpick]')) { if (S.selDay === S.extraDay) S.selDay = S.day; S.extraDay = null; return render(); }
   const sel = e.target.closest('[data-sel]'); if (sel) { S.selDay = sel.dataset.sel === 'S' ? 'S' : +sel.dataset.sel; return render(); }
   const tb = e.target.closest('[data-tab]'); if (tb) { S.cTab = tb.dataset.tab; return render(); }
   const a = e.target.closest('[data-act]'); if (!a) return;
@@ -527,6 +567,9 @@ document.addEventListener('click', e => {
   else if (act === 'state') document.getElementById('pstate').classList.toggle('open');
   else if (act === 'reset') { reset(); render(); }
   else if (act === 'dismiss') { S.banner = null; render(); }
+  else if (act === 'pick') { const i = document.getElementById('pickday'); try { i.showPicker(); } catch { i.focus(); i.click(); } }
+  else if (act === 'more') { S[a.dataset.k] = !S[a.dataset.k]; render(); }
+  else if (act === 'pile') { pile(); render(); }
   else if (act === 'fold') { S.fold = !S.fold; render(); }
   else if (act === 'sheet') { S.sheet = !S.sheet; render(); }
   else if (act === 'up') { S.upOpen = !S.upOpen; render(); }
@@ -536,7 +579,8 @@ document.addEventListener('change', e => {
   if (e.target.dataset.act !== 'openday' || !e.target.value) return;
   const [y, m, d] = e.target.value.split('-').map(Number);
   S.extraDay = Math.round((new Date(y, m - 1, d) - BASE) / 864e5);
-  materializeEvents(S.day, S.extraDay); render();
+  if (S.extraDay <= S.day + 7) { S.extraDay = null; return render(); } // only days beyond the 7 in the strip
+  S.selDay = S.extraDay; materializeEvents(S.day, S.extraDay); render();
 });
 document.addEventListener('keydown', e => {
   if (e.target.closest('input,textarea,[contenteditable]')) return;
@@ -547,6 +591,7 @@ reset();
 const tq = new URLSearchParams(location.search).get('t'); // e.g. ?t=17:20 to open at a given time
 if (tq) { const [h, m] = tq.split(':').map(Number); S.time = h * 60 + (m || 0); }
 S.cTab = new URLSearchParams(location.search).get('tab') || undefined; // ?tab=later|earlier|someday
+for (let i = +(new URLSearchParams(location.search).get('pile') || 0); i > 0; i--) pile(); // ?pile=2 adds 12 Tasks
 render();
 </script>
 </body>
