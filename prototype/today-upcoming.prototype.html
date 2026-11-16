@@ -1,6 +1,19 @@
 <!doctype html>
 <!--
-  PROTOTYPE — throwaway. Answers wayfinder ticket "What should Today + Upcoming look and feel like?"
+  PROTOTYPE — throwaway.
+  ROUND 5 answers wayfinder ticket "How are Tasks and Events added, dated and placed from Today?"
+  Three structurally different ways to edit, all on the settled C4 layout (?variant=E1|E2|E3, ← → to cycle):
+     E1 Type it       — one command line at the bottom. Words set the day, a time range makes an Event, @event places,
+                        >task makes a Sub-task, "someday" undates. Tap anything to load it into the line and retype it.
+     E2 Plus + form   — a + button opens a form sheet (Task | Event, day chips, Event chips, Sub-task of). Tap anything to open the same form.
+     E3 Drag + inline — "+ ..." fields right where things go (in Event cards, Anytime, Later, Someday). Drag a Task onto
+                        an Event (place), a day chip (date + unplace), Anytime (unplace) or the Someday tab; drag an Event onto a day
+                        chip to move it. On a phone, press and hold to drag. Tap for a small menu (rename, times, + Sub-task, delete).
+  Rules the prototype applies (open for challenge): placing sets the item's day; re-dating a Task brings its open Sub-tasks
+  and clears their Placements; moving an Event brings its placed Tasks; adding the first Sub-task to a placed Task moves
+  the Placement onto the Sub-task; a Sub-task can't go to Someday on its own; editing an Occurrence changes only that one.
+
+  Earlier rounds answered "What should Today + Upcoming look and feel like?"
   Round 1 had three structurally different variants (?variant=A|B|C). C (Now / Next) won.
   Round 3 cycles C4/C5: C2's tabs (Later today / Earlier today / Someday) + C3's Done meter, Done above or below the tabs.
   Round 2 (C1–C3, via ?variant=): same top (date strip, Now, Next, Anytime), three takes on Later today / Earlier today / Someday.
@@ -175,6 +188,41 @@
   .lcard{flex:none;width:150px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
   .lcard .tm{font-size:12px;color:var(--accent);font-weight:600} .lcard .ti{font-weight:600;margin:2px 0}
   .meter{height:8px;background:var(--line);border-radius:4px;overflow:hidden} .meter i{display:block;height:100%;background:var(--ok)}
+  /* ---------- Round 5: editing (E1 Type it / E2 Plus + form / E3 Drag + inline), all on the C4 layout ---------- */
+  body.emode{padding-bottom:210px}
+  .e-it,.e-ev{cursor:pointer}
+  .e-link{text-decoration:underline dotted;cursor:pointer}
+  .e-tip{font-size:12.5px;color:var(--mute);margin:-6px 0 10px}
+  body.e3 [data-drag]{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  body.e-dragging{user-select:none;cursor:grabbing}
+  body.e-dragging [data-drop]{outline:1px dashed var(--mute);outline-offset:2px}
+  .e-over{outline:2px solid var(--accent)!important;outline-offset:2px;background-image:linear-gradient(var(--accent-soft),var(--accent-soft))}
+  .c-now.e-over{background-image:none}
+  .e-ghost{position:fixed;z-index:60;pointer-events:none;background:var(--card);color:var(--ink);border:1px solid var(--accent);border-radius:20px;padding:4px 12px;box-shadow:0 6px 18px rgba(0,0,0,.25);font-size:14px}
+  #ebar{position:fixed;left:50%;transform:translateX(-50%);bottom:62px;width:min(640px,96vw);background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.15);padding:6px 12px 8px;z-index:40;display:none}
+  #ebar.editing{border-color:var(--accent)}
+  #eline{width:100%;font:inherit;font-size:16px;border:0;background:none;color:var(--ink);outline:none;padding:6px 0}
+  #epv{font-size:13px;color:var(--accent);min-height:18px} #epv.err{color:var(--warn)} #epv.mute{color:var(--mute)}
+  #ehint{font-size:11.5px;color:var(--mute);margin-top:2px} #ehint code{background:var(--bg);border-radius:4px;padding:0 4px}
+  #ehint button{font-size:11.5px;border:1px solid var(--line);background:none;border-radius:6px;padding:0 6px;color:#d33}
+  #efab{position:fixed;right:max(16px,calc(50vw - 330px));bottom:70px;width:56px;height:56px;border-radius:50%;border:0;background:var(--accent);color:#fff;font-size:30px;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.25);z-index:40;display:none;place-items:center}
+  #etoast{position:fixed;left:50%;top:12px;transform:translateX(-50%);background:var(--ink);color:var(--bg);border-radius:20px;padding:6px 14px;font-size:13.5px;z-index:70;display:none;max-width:92vw}
+  #esheet .sheet{max-height:86vh;overflow:auto}
+  .e-chips{display:flex;flex-wrap:wrap;gap:6px}
+  .e-chip{border:1px solid var(--line);background:var(--card);border-radius:16px;padding:4px 10px;font-size:13.5px;display:inline-flex;gap:4px;align-items:center}
+  .e-chip.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  .e-field{margin:12px 0} .e-field>.l{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin-bottom:5px}
+  .e-in{font:inherit;width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:var(--bg);color:var(--ink)}
+  .e-in.title{font-size:18px;font-weight:600}
+  .e-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+  .e-row label{flex:1;font-size:12px;color:var(--mute)}
+  .e-btn{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:7px 14px}
+  .e-btn.pri{background:var(--accent);color:#fff;border-color:var(--accent)} .e-btn.del{color:#d33} .e-btn.push{margin-left:auto}
+  .e-err{color:var(--warn);font-size:13px;margin-top:8px}
+  .e-add{font:inherit;font-size:14px;border:1px dashed var(--line);border-radius:20px;padding:5px 12px;background:none;color:var(--ink);width:100%;margin-top:6px;outline:none}
+  .e-add:focus{border-style:solid;border-color:var(--accent)}
+  .c-now:not(.also) .e-add{border-color:rgba(255,255,255,.55);color:#fff} .c-now:not(.also) .e-add::placeholder{color:rgba(255,255,255,.75)}
+  .e-ghostrow{color:var(--ghost);font-style:italic;font-size:14px;padding:3px 0}
   /* ---------- Switcher / dev bar (not part of the design) ---------- */
   #pbar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:50;display:flex;gap:4px;align-items:center;background:#111;color:#fff;border-radius:30px;padding:6px 8px;box-shadow:0 6px 24px rgba(0,0,0,.35);font:13px system-ui;white-space:nowrap;max-width:96vw;overflow-x:auto}
   #pbar button{background:#2a2a2e;border:0;color:#fff;border-radius:20px;padding:5px 10px}
@@ -534,11 +582,11 @@ const VariantC4 = () => cMix(true), VariantC5 = () => cMix(false);
 
 /* ===================== switcher + wiring ===================== */
 // Round 2: C won. C1–C3 differ only below Anytime (Later / Earlier / Someday). A and B stay reachable via ?variant=A|B but are out of the cycle.
-const VARIANTS = { C4: ['Done above', VariantC4], C5: ['Done below', VariantC5], C1: ['Rail', VariantC1], C2: ['Tabs', VariantC2], C3: ['Cards', VariantC3], A: ['Timeline', VariantA], B: ['Checklist', VariantB] };
-const KEYS = ['C4', 'C5']; // round 3; C1–C3 still open via ?variant=
+const VARIANTS = { E1: ['Type it', VariantE1], E2: ['Plus + form', VariantE2], E3: ['Drag + inline', VariantE3], C4: ['Done above', VariantC4], C5: ['Done below', VariantC5], C1: ['Rail', VariantC1], C2: ['Tabs', VariantC2], C3: ['Cards', VariantC3], A: ['Timeline', VariantA], B: ['Checklist', VariantB] };
+const KEYS = ['E1', 'E2', 'E3']; // round 5 (editing); C4 (the settled view, read-only) and older rounds still open via ?variant=
 let cur = new URLSearchParams(location.search).get('variant');
 if (cur === 'C') cur = 'C1';
-if (!VARIANTS[cur]) cur = 'C4';
+if (!VARIANTS[cur]) cur = 'E1';
 function setVariant(v) { cur = v; const u = new URL(location); u.searchParams.set('variant', v); history.replaceState(null, '', u); render(); }
 function render() {
   document.getElementById('app').innerHTML = VARIANTS[cur][1]();
@@ -587,6 +635,402 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft') document.querySelector('[data-act=prev]').click();
   if (e.key === 'ArrowRight') document.querySelector('[data-act=next]').click();
 });
+/* ===================== Round 5: adding, dating and placing (E1 / E2 / E3), all on the C4 layout ===================== */
+const tById = id => S.tasks.find(t => t.id === id);
+const baseDay = () => typeof S.selDay === 'number' ? S.selDay : S.day;
+const dayLabel = d => d === null ? 'Someday' : d === S.day ? 'Today' : d === S.day + 1 ? 'Tomorrow' : fmtDay(d);
+const dayWord = d => d === null ? 'someday' : d === S.day ? 'today' : d === S.day + 1 ? 'tomorrow' : d > S.day && d < S.day + 7 ? fmtDay(d, { weekday: 'short' }).toLowerCase() : `${dateOf(d).getDate()}/${dateOf(d).getMonth() + 1}`;
+const toMin = s => { const [h, m] = String(s).split(':').map(Number); return h * 60 + (m || 0); };
+const isoDay = iso => { const [y, m, d] = iso.split('-').map(Number); return Math.round((new Date(y, m - 1, d) - BASE) / 864e5); };
+function flash(msg) { S.toast = msg; (S.log ||= []).push(`${hm(S.time)} ${msg}`); clearTimeout(flash.t); flash.t = setTimeout(() => { S.toast = null; render(); }, 2800); }
+
+/* model operations: return an error string, or nothing / the new thing */
+const M = {
+  addTask({ title, date = S.day, eventId = null, parentId = null }) {
+    const p = parentId && tById(parentId), ev = eventId && evById(eventId);
+    if (p && p.parentId) return 'Sub-tasks never have Sub-tasks';
+    const t = { id: 't' + nid++, title, date: ev ? ev.date : p ? p.date : date, eventId: eventId || null, done: null, carried: 0, parentId: parentId || null, recurId: null, skipped: false };
+    if (p) { if (p.eventId && !t.eventId) t.eventId = p.eventId; p.eventId = null; p.done = null; } // parents are never placed: the first Sub-task takes over the Placement
+    S.tasks.push(t); return t;
+  },
+  place(t, e) {
+    if (subsOf(t.id).length) return `“${t.title}” has Sub-tasks — place those instead`;
+    t.eventId = e.id; if (t.date !== e.date) { t.date = e.date; t.carried = 0; }
+  },
+  unplace(t) { t.eventId = null; },
+  date(t, d) {
+    if (d === null && t.parentId) return 'A Sub-task comes with its Task — send the Task to Someday instead';
+    [t, ...subsOf(t.id).filter(isOpen)].forEach(x => { if (x.date !== d) { x.date = d; x.eventId = null; x.carried = 0; } });
+    if (d !== null) materializeEvents(S.day, d);
+  },
+  addEvent({ title, date, start, end }) {
+    if (!(end > start)) return 'End must be after start';
+    const e = { id: 'e' + nid++, title, date, start, end }; S.events.push(e); materializeEvents(S.day, date); return e;
+  },
+  editEvent(e, p) {
+    const n = { ...e, ...p }; if (!(n.end > n.start)) return 'End must be after start';
+    if (n.date !== e.date) { placedIn(e.id).forEach(t => t.date = n.date); materializeEvents(S.day, n.date); } // placed Tasks come along
+    Object.assign(e, p);
+  },
+  delTask(t) {
+    const gone = new Set([t.id, ...subsOf(t.id).map(s => s.id)]); S.tasks = S.tasks.filter(x => !gone.has(x.id));
+    if (t.parentId) { const p = tById(t.parentId), rest = subsOf(p.id); p.done = rest.length && rest.every(s => s.done) ? S.time : null; }
+  },
+  delEvent(e) { placedIn(e.id).forEach(t => t.eventId = null); S.events = S.events.filter(x => x !== e); },
+};
+const okOrFlash = (r, msg) => { if (typeof r === 'string') { flash(r); return false; } if (msg) flash(msg); return true; };
+
+/* ---------- shared C4 rendering with hooks (attributes make things tappable / draggable / droppable) ---------- */
+const A = (k, x) => `data-open="${k}:${x.id}" data-drag="${k}:${x.id}"`;
+const pLink = t => t.parentId ? `<span class="e-link" data-open="t:${t.parentId}">↳ ${esc(tById(t.parentId).title)}</span>` : '';
+const eItem = (t, opts = {}) => `<div class="e-it" ${A('t', t)}>${item(t, { ctx: pLink(t), ...opts })}</div>`;
+const loose = d => unplacedOn(d).flatMap(t => subsOf(t.id).length ? subsOf(t.id).filter(s => !s.eventId && !s.skipped).map(s => ({ t: s, p: tById(s.parentId) })) : [{ t }]);
+function ePill(t, p) {
+  return `<span class="c-pill e-it ${t.done ? 'done' : ''} ${t.carried && isOpen(t) ? 'carry' : ''}" ${A('t', t)}><button class="tick" data-tick="${t.id}">${t.done ? '✓' : ''}</button>${esc(t.title)}${p ? ` <span class="ctx">· <span class="e-link" data-open="t:${p.id}">${esc(p.title)}</span></span>` : ''}${t.recurId ? ' <span class="badge recur">↻</span>' : ''}${t.carried && isOpen(t) ? ` <span class="badge carry">↪${t.carried}d</span>` : ''}</span>`;
+}
+const hook = (V, k, ...a) => V[k] ? V[k](...a) : '';
+function eTop(d, V) {
+  const evs = eventsOn(d);
+  const live = evs.filter(e => e.start <= S.time && S.time < e.end).sort((a, b) => b.start - a.start);
+  const nextAt = evs.find(e => e.start > S.time)?.start, nexts = evs.filter(e => e.start === nextAt);
+  const placed = e => placedIn(e.id).map(t => eItem(t, { showDone: false })).join('');
+  let html = '';
+  if (live.length) {
+    const card = (e, i) => `<div class="c-now e-ev ${i ? 'also' : ''}" ${A('e', e)} data-drop="e:${e.id}"><div class="lbl">${i ? 'Also now' : 'Now'} · ${hm(e.start)}–${hm(e.end)} · ${e.end - S.time} min left</div><h2>${esc(e.title)}${e.recurId ? ' ↻' : ''}</h2><div class="bar"><i style="width:${Math.round(100 * (S.time - e.start) / (e.end - e.start))}%"></i></div>${placed(e) || '<div style="opacity:.8">Nothing placed</div>'}${hook(V, 'inEvent', e)}</div>`;
+    html += live.length > 1 ? `<div class="c-sec">${live.length} Events at once</div><div class="c-live">${live.map(card).join('')}</div>` : card(live[0], 0);
+  } else html += `<div class="c-now" style="background:var(--card);color:var(--ink);border:1px solid var(--line)"><div class="lbl">Now</div><h2>Free</h2><div class="mute">No Event right now — pick something from Anytime.</div></div>`;
+  if (nexts.length) html += `<div class="c-next"><div class="lbl">Next · ${hm(nextAt)} (in ${dur(nextAt - S.time)})</div>${nexts.map(e => `<div class="e-ev" ${A('e', e)} data-drop="e:${e.id}"><h3 style="margin:2px 0 4px">${esc(e.title)}${e.recurId ? ' ↻' : ''}</h3>${placed(e)}${hook(V, 'inEvent', e)}</div>`).join('')}</div>`;
+  const any = loose(d).filter(({ t }) => isOpen(t)).sort((a, b) => (b.t.carried > 0) - (a.t.carried > 0));
+  const [shown, more] = capped(any, 6, 'moreAny');
+  html += `<div data-drop="d:${d}" style="border-radius:10px"><div class="c-sec">Anytime today <span class="cnt">${any.length}</span></div><div class="c-pills" style="margin-bottom:4px">${shown.map(({ t, p }) => ePill(t, p)).join('')}${more}</div>${hook(V, 'inAnytime', d)}</div><div style="height:10px"></div>`;
+  return { html, later: evs.filter(e => e.start > S.time && !nexts.includes(e)), past: evs.filter(e => e.end <= S.time) };
+}
+function eDay(d, V) { // another day from the strip, editable
+  const evs = eventsOn(d);
+  return `<div class="c-other"><h2 style="margin-bottom:6px">${fmtDay(d, { weekday: 'long', day: 'numeric', month: 'long' })}</h2>
+    <div class="c-sec">Events</div>${evs.map(e => `<div class="tab-row e-ev" ${A('e', e)} data-drop="e:${e.id}" style="display:block"><b>${esc(e.title)}</b>${e.recurId ? ' ↻' : ''} <span class="small mute">${hm(e.start)}–${hm(e.end)}</span>${placedIn(e.id).map(t => eItem(t)).join('')}${hook(V, 'inEvent', e)}</div>`).join('') || '<div class="mute small">no Events</div>'}${hook(V, 'inLater', d)}
+    <div data-drop="d:${d}" style="border-radius:10px;padding-bottom:4px"><div class="c-sec">Not placed</div>${loose(d).map(({ t }) => eItem(t)).join('')}${ghostsOn(d).map(r => `<div class="e-ghostrow">○ ${esc(r.title)} ↻ ${ruleText(r.rule)}</div>`).join('') || (loose(d).length ? '' : '<div class="mute small">nothing</div>')}${hook(V, 'inAnytime', d)}</div></div>`;
+}
+function eView(V) {
+  const d = S.day;
+  const strip = cStrip(d).replace(/data-sel="(\d+)"/g, 'data-sel="$1" data-drop="d:$1"');
+  const tip = V.tip ? `<div class="e-tip">${V.tip}</div>` : '';
+  if (S.selDay !== d) return `<div class="c-main">${strip}${tip}${eDay(S.selDay, V)}</div>`;
+  const { html: top, later, past } = eTop(d, V);
+  const done = doneToday(d), total = S.tasks.filter(t => t.date === d && !subsOf(t.id).length && !t.skipped).length;
+  const tab = ['later', 'earlier', 'someday'].includes(S.cTab) ? S.cTab : 'later';
+  const tabs = [['later', 'Later today', later.length], ['earlier', 'Earlier today', past.length], ['someday', 'Someday', someday().length]];
+  let body = '';
+  if (tab === 'later') body = (later.map(e => `<div class="tab-row e-ev" ${A('e', e)} data-drop="e:${e.id}"><div><b>${esc(e.title)}</b>${e.recurId ? ' ↻' : ''}<div class="small mute">${hm(e.start)}–${hm(e.end)}${placedIn(e.id).length ? ' · ' + placedNames(e) : ''}</div></div><span class="rel">in ${dur(e.start - S.time)}</span></div>`).join('') || '<div class="mute small" style="padding:8px 0">nothing else today</div>') + hook(V, 'inLater', d);
+  if (tab === 'earlier') body = [...past].reverse().map(e => {
+    const its = placedIn(e.id), got = its.filter(t => t.done).length;
+    return `<div class="tab-row past e-ev" ${A('e', e)} data-drop="e:${e.id}"><div><b>${esc(e.title)}</b>${e.recurId ? ' ↻' : ''}<div class="small mute">${hm(e.start)}–${hm(e.end)}${its.length ? ' · ' + placedNames(e) : ''}</div></div><span class="rel ${its.length && got < its.length ? 'warn' : 'ok'}">${its.length ? `${got}/${its.length} done` : `ended ${dur(S.time - e.end)} ago`}</span></div>`;
+  }).join('') || '<div class="mute small" style="padding:8px 0">no Events finished yet</div>';
+  if (tab === 'someday') body = someday().map(t => eItem(t)).join('') + hook(V, 'inSomeday');
+  const doneSec = `<div class="c-sec">Done today <span class="cnt">${done.length}</span></div><div class="meter"><i style="width:${total ? Math.round(100 * done.length / total) : 0}%"></i></div><div class="small mute" style="margin:4px 0 8px">${done.length} of ${total} done</div>
+    <div class="c-pills">${capped([...done].reverse(), 4, 'moreDone')[0].map(t => `<span class="c-pill done e-it" ${A('t', t)}><button class="tick" data-tick="${t.id}">✓</button>${esc(t.title)} <span class="ctx">${hm(t.done)}${doneWhere(t) ? ' · ' + esc(doneWhere(t).title) : ''}</span></span>`).join('') || '<span class="mute small">nothing yet</span>'}${capped(done, 4, 'moreDone')[1]}</div>`;
+  const tabsHtml = `<div class="seg">${tabs.map(([k, l, n]) => `<button class="${k === tab ? 'on' : ''} ${k === 'someday' ? 'sd' : ''}" data-tab="${k}" ${k === 'someday' ? 'data-drop="S"' : ''}>${l}<span class="n">${n}</span></button>`).join('')}</div><div class="tab-body ${tab === 'someday' ? 'sd' : ''}">${tab === 'someday' ? '<div class="sd-note">Tasks with no date</div>' : ''}${body}</div>`;
+  return `<div class="c-main">${strip}${tip}${banner()}${top}${doneSec}${tabsHtml}</div>`;
+}
+
+/* ---------- E1 Type it: one line, words do the work ---------- */
+const WD = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'], MON = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+function dayOfDM(d, m) { let y = BASE.getFullYear(), x = Math.round((new Date(y, m - 1, d) - BASE) / 864e5); if (x < S.day) x = Math.round((new Date(y + 1, m - 1, d) - BASE) / 864e5); return x; }
+function wordDay(w) {
+  if (w === 'today') return S.day; if (/^tom|^tmr/.test(w)) return S.day + 1; if (w === 'someday') return null;
+  const i = WD.indexOf(w.slice(0, 3)); return S.day + ((i - dow(S.day) + 7) % 7 || 7);
+}
+function parseLine(s) {
+  let rest = ' ' + s.trim() + ' '; const o = {};
+  const take = (re, f) => { rest = rest.replace(re, (...m) => { f(m); return ' '; }); };
+  take(/\s(\d{1,2})(?::(\d{2}))?\s*[-–]\s*(\d{1,2})(?::(\d{2}))?(?=\s)/, m => { o.start = +m[1] * 60 + +(m[2] || 0); o.end = +m[3] * 60 + +(m[4] || 0); });
+  if (o.start === undefined) take(/\s(?:at\s)?(\d{1,2}):(\d{2})(?=\s)/, m => { o.start = +m[1] * 60 + +m[2]; o.end = o.start + 60; });
+  take(/\s@(\S+)/, m => o.at = m[1].toLowerCase());
+  take(/\s>(\S+)/, m => o.under = m[1].toLowerCase());
+  take(/\s(today|tomorrow|tmrw?|someday|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:rs?(?:day)?)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)(?=\s)/i, m => o.date = wordDay(m[1].toLowerCase()));
+  take(/\s(\d{1,2})\/(\d{1,2})(?=\s)/, m => o.date = dayOfDM(+m[1], +m[2]));
+  take(new RegExp(`\\s(${MON.join('|')})[a-z]*\\s(\\d{1,2})(?=\\s)`, 'i'), m => o.date = dayOfDM(+m[2], MON.indexOf(m[1].toLowerCase()) + 1));
+  take(new RegExp(`\\s(\\d{1,2})\\s(${MON.join('|')})[a-z]*(?=\\s)`, 'i'), m => o.date = dayOfDM(+m[1], MON.indexOf(m[2].toLowerCase()) + 1));
+  o.title = rest.replace(/\s+/g, ' ').trim(); return o;
+}
+const wordsMatch = (title, w) => { const l = title.toLowerCase(); return l.split(/\s+/).some(x => x.startsWith(w)) || l.replace(/\s/g, '').startsWith(w); };
+const firstWord = s => s.toLowerCase().split(/\s+/)[0].replace(/[^a-z0-9]/g, '');
+let E1ed = null; // {k, id} while editing
+function resolveLine(s) {
+  const p = parseLine(s), r = { title: p.title };
+  if (!p.title) r.err = 'Type a title';
+  const isE = E1ed ? E1ed.k === 'e' : p.start !== undefined;
+  if (isE) {
+    r.kind = 'e'; const old = E1ed && evById(E1ed.id);
+    if (p.date === null) r.err = 'Events need a day'; if (p.at || p.under) r.err = '@ and > are for Tasks';
+    r.date = p.date ?? (old ? old.date : baseDay()); r.start = p.start ?? old?.start; r.end = p.end ?? old?.end;
+    if (r.start === undefined) r.err = 'Give the Event a time, e.g. 18-19'; else if (!(r.end > r.start)) r.err = 'End must be after start';
+  } else {
+    r.kind = 't'; const old = E1ed && tById(E1ed.id);
+    if (p.start !== undefined) r.err = 'Tasks have no time of their own — put it in an Event with @';
+    if (p.under && !(old && old.parentId)) { r.parent = S.tasks.find(t => !t.parentId && isOpen(t) && t.id !== old?.id && wordsMatch(t.title, p.under)); if (!r.parent) r.err = `No open Task matching >${p.under}`; }
+    if (old && old.parentId) r.parent = tById(old.parentId);
+    if (p.at) {
+      if (p.date === null) r.err = 'Someday Tasks can’t be placed';
+      const days = p.date !== undefined && p.date !== null ? [p.date] : [baseDay(), ...Array.from({ length: 7 }, (_, i) => S.day + i)];
+      for (const d of days) { r.ev = eventsOn(d).find(e => wordsMatch(e.title, p.at) && (d !== S.day || e.end > S.time)) || eventsOn(d).find(e => wordsMatch(e.title, p.at)); if (r.ev) break; }
+      if (!r.ev) r.err = `No Event matching @${p.at}`;
+      if (old && subsOf(old.id).length) r.err = 'This Task has Sub-tasks — place those instead';
+    }
+    if (p.date === null && r.parent) r.err = 'A Sub-task comes with its Task — it can’t go to Someday on its own';
+    r.date = r.ev ? r.ev.date : p.date !== undefined ? p.date : old ? old.date : r.parent ? r.parent.date : baseDay();
+  }
+  return r;
+}
+function serialize(k, id) {
+  if (k === 'e') { const e = evById(id); return `${e.title} ${hm(e.start)}-${hm(e.end)} ${dayWord(e.date)}`; }
+  const t = tById(id), e = t.eventId && evById(t.eventId);
+  return `${t.title} ${dayWord(t.date)}${e ? ' @' + firstWord(e.title) : ''}${t.parentId ? ' >' + firstWord(tById(t.parentId).title) : ''}`;
+}
+function describe(r) {
+  const v = E1ed ? 'Save' : 'Add';
+  if (r.kind === 'e') return `${v} Event “${r.title}” · ${dayLabel(r.date)} · ${hm(r.start)}–${hm(r.end)}${E1ed && evById(E1ed.id).date !== r.date && placedIn(E1ed.id).length ? ` · its ${placedIn(E1ed.id).length} placed Tasks come along` : ''}`;
+  return `${v} ${r.parent ? 'Sub-task' : 'Task'} “${r.title}”${r.parent ? ` (of “${r.parent.title}”)` : ''} · ${dayLabel(r.date)}${r.date === null ? '' : r.ev ? ` · in ${r.ev.title} ${hm(r.ev.start)}` : ' · not placed'}`;
+}
+function e1Preview() {
+  const inp = document.getElementById('eline'), pv = document.getElementById('epv'), hint = document.getElementById('ehint');
+  document.getElementById('ebar').classList.toggle('editing', !!E1ed);
+  hint.innerHTML = E1ed ? `Editing — <b>Enter</b> saves · <b>Esc</b> cancels · <button data-e="e1del">Delete</button>`
+    : `<code>tomorrow</code> <code>fri</code> <code>3/12</code> <code>someday</code> set the day · <code>18-19</code> makes an Event · <code>@deep</code> places in an Event · <code>&gt;report</code> makes a Sub-task · tap anything to edit · <b>/</b> to focus`;
+  if (!inp.value.trim()) { pv.className = 'mute'; pv.textContent = E1ed ? '' : `New things land on ${dayLabel(baseDay())} unless you say otherwise`; return; }
+  const r = resolveLine(inp.value); pv.className = r.err ? 'err' : ''; pv.textContent = r.err || describe(r);
+}
+function e1Submit() {
+  const inp = document.getElementById('eline'), r = resolveLine(inp.value);
+  if (r.err) return flash(r.err);
+  let res;
+  if (r.kind === 'e') {
+    if (E1ed) { const e = evById(E1ed.id); e.title = r.title; res = M.editEvent(e, { date: r.date, start: r.start, end: r.end }); }
+    else res = M.addEvent({ title: r.title, date: r.date, start: r.start, end: r.end });
+  } else if (E1ed) { const t = tById(E1ed.id); t.title = r.title; res = r.ev ? M.place(t, r.ev) : (M.date(t, r.date) || M.unplace(t)); }
+  else res = M.addTask({ title: r.title, date: r.date, eventId: r.ev?.id, parentId: r.parent?.id });
+  if (!okOrFlash(res, describe(r).replace(/^(Add|Save)/, m => m === 'Add' ? 'Added' : 'Saved'))) return;
+  inp.value = ''; E1ed = null; render();
+}
+function VariantE1() { return eView({}); }
+
+/* ---------- E2 Plus + form ---------- */
+const roundUp = m => Math.min(22 * 60, Math.ceil(m / 15) * 15);
+function openDraft(k, id) {
+  if (!k) S.draft = { mode: 'new', kind: 't', title: '', date: baseDay(), eventId: null, parentId: null, start: hm(roundUp(S.time)), end: hm(roundUp(S.time) + 60) };
+  else if (k === 't') { const t = tById(id); S.draft = { mode: 'edit', kind: 't', id, title: t.title, date: t.date, eventId: t.eventId, parentId: t.parentId, subTitle: '' }; }
+  else { const e = evById(id); S.draft = { mode: 'edit', kind: 'e', id, title: e.title, date: e.date, start: hm(e.start), end: hm(e.end) }; }
+}
+function draftSet(k, v) {
+  const D = S.draft; v = v === 'null' ? null : k === 'date' ? +v : v; D[k] = v; D.err = null;
+  if (k === 'date' && D.eventId && evById(D.eventId).date !== v) D.eventId = null;
+  if (k === 'kind' && v === 'e' && D.date === null) D.date = baseDay();
+  if (k === 'parentId') { const p = v && tById(v); if (p) { D.date = p.date; D.eventId = null; } }
+}
+function sheetE2() {
+  const D = S.draft; if (!D) return '';
+  const isT = D.kind === 't', t = isT && D.id && tById(D.id), subs = t ? subsOf(t.id) : [], par = D.parentId && tById(D.parentId);
+  const chip = (k, v, l, on) => `<button class="e-chip ${on ? 'on' : ''}" data-d="${k}:${v}">${l}</button>`;
+  const days = Array.from({ length: 7 }, (_, i) => S.day + i);
+  const dayChips = days.map(x => chip('date', x, x === S.day ? 'Today' : x === S.day + 1 ? 'Tomorrow' : fmtDay(x, { weekday: 'short', day: 'numeric' }), D.date === x)).join('')
+    + (D.date !== null && D.date >= S.day + 7 ? chip('date', D.date, fmtDay(D.date), true) : '')
+    + `<input type="date" class="e-in" style="width:auto;padding:3px 6px;font-size:13px" data-dfield="pickdate" title="Another day">`
+    + (isT && !par ? chip('date', 'null', '○ Someday', D.date === null) : '');
+  let evField = '';
+  if (isT) {
+    if (subs.length) evField = `<div class="small mute">Has Sub-tasks — place those, not the Task.</div>`;
+    else if (D.date === null) evField = `<div class="small mute">Someday Tasks aren’t placed. Pick a day first.</div>`;
+    else evField = `<div class="e-chips">${chip('eventId', 'null', 'Not placed', !D.eventId)}${eventsOn(D.date).map(e => chip('eventId', e.id, `${hm(e.start)} ${esc(e.title)}`, D.eventId === e.id)).join('') || '<span class="small mute">no Events that day</span>'}</div>`;
+  }
+  const head = D.mode === 'new' ? `<div class="e-chips">${chip('kind', 't', 'Task', isT)}${chip('kind', 'e', 'Event', !isT)}</div>`
+    : `<div class="small mute">${isT ? (t.parentId ? `Sub-task of “${esc(tById(t.parentId).title)}”` : 'Task') : 'Event'}${!isT && evById(D.id).recurId ? ' · ↻ changes this Occurrence only' : ''}</div>`;
+  let fields = `<input class="e-in title" data-dfield="title" placeholder="${isT ? 'What needs doing?' : 'Event name'}" value="${esc(D.title)}" autofocus>`;
+  if (isT && D.mode === 'new') fields += `<div class="e-field"><div class="l">Sub-task of</div><select class="e-in" data-dfield="parentId"><option value="">— nothing (a Task on its own)</option>${S.tasks.filter(x => !x.parentId && isOpen(x)).map(x => `<option value="${x.id}" ${x.id === D.parentId ? 'selected' : ''}>${esc(x.title)} · ${dayLabel(x.date)}</option>`).join('')}</select></div>`;
+  fields += `<div class="e-field"><div class="l">Day</div><div class="e-chips">${dayChips}</div></div>`;
+  if (isT) fields += `<div class="e-field"><div class="l">Do it during</div>${evField}</div>`;
+  else fields += `<div class="e-row"><label>Start<input type="time" class="e-in" data-dfield="start" value="${D.start}"></label><label>End<input type="time" class="e-in" data-dfield="end" value="${D.end}"></label></div>${D.mode === 'edit' && placedIn(D.id).length ? `<div class="small mute" style="margin-top:6px">Placed here: ${placedNames(evById(D.id))} — they move with the Event.</div>` : ''}`;
+  if (t && !t.parentId) fields += `<div class="e-field"><div class="l">Sub-tasks</div><div class="e-chips">${subs.map(s => `<button class="e-chip" data-e="opensub" data-id="${s.id}">${s.done ? '✓' : '○'} ${esc(s.title)} <span class="mute small">· ${subWhere(s)}</span></button>`).join('')}</div><input class="e-add" data-add="sub:${t.id}" placeholder="+ Sub-task (Enter)"></div>`;
+  return `<div class="sheet-bg" data-e="close"></div><div class="sheet"><div class="grab"></div>${head}<div style="height:8px"></div>${fields}${D.err ? `<div class="e-err">${esc(D.err)}</div>` : ''}
+    <div class="e-row">${D.mode === 'edit' ? '<button class="e-btn del" data-e="d-del">Delete</button>' : ''}<button class="e-btn push" data-e="close">Cancel</button><button class="e-btn pri" data-e="d-save">${D.mode === 'new' ? 'Add' : 'Save'}</button></div></div>`;
+}
+function saveDraft() {
+  const D = S.draft, title = (D.title || '').trim();
+  if (!title) return D.err = 'Give it a title';
+  let r;
+  if (D.kind === 't') {
+    if (D.mode === 'new') r = M.addTask({ title, date: D.date, eventId: D.eventId, parentId: D.parentId || null });
+    else { const t = tById(D.id); t.title = title; r = D.eventId ? M.place(t, evById(D.eventId)) : (M.date(t, D.date) || M.unplace(t)); }
+  } else {
+    const p = { title, date: D.date, start: toMin(D.start), end: toMin(D.end) };
+    r = D.mode === 'new' ? M.addEvent(p) : M.editEvent(evById(D.id), p);
+  }
+  if (typeof r === 'string') return D.err = r;
+  flash(`${D.mode === 'new' ? 'Added' : 'Saved'} “${title}” · ${dayLabel(D.date)}`); S.draft = null;
+}
+function VariantE2() { return eView({}); }
+
+/* ---------- E3 Drag + inline ---------- */
+const V3 = {
+  tip: 'Drag a Task onto an Event, a day, Anytime or the Someday tab · drag an Event onto a day · tap for more · phone: press and hold to drag',
+  inEvent: e => `<input class="e-add" data-add="e:${e.id}" placeholder="+ Task in ${esc(e.title)}">`,
+  inAnytime: d => `<input class="e-add" data-add="d:${d}" placeholder="+ Task ${d === S.day ? 'today' : 'on ' + fmtDay(d, { weekday: 'short' })}">`,
+  inLater: d => `<input class="e-add" data-add="ev:${d}" placeholder="+ Event, e.g. Gym 18-19">`,
+  inSomeday: () => `<input class="e-add" data-add="S" placeholder="+ Someday Task">`,
+};
+function VariantE3() { return eView(V3); }
+function menuE3() {
+  const m = S.menu; if (!m) return '';
+  let body = '';
+  if (m.k === 't') {
+    const t = tById(m.id); if (!t) { S.menu = null; return ''; }
+    const ev = t.eventId && evById(t.eventId), subs = subsOf(t.id);
+    body = `<input class="e-in title" data-m="title" value="${esc(t.title)}">
+      <div class="small mute" style="margin:6px 0">${t.parentId ? `Sub-task of “${esc(tById(t.parentId).title)}” · ` : ''}${dayLabel(t.date)}${ev ? ` · in ${esc(ev.title)} ${hm(ev.start)}` : t.date !== null && !subs.length ? ' · not placed' : ''}</div>
+      ${subs.map(s => `<div class="e-it small" data-open="t:${s.id}" style="padding:2px 0">${s.done ? '✓' : '○'} ${esc(s.title)} <span class="mute">· ${subWhere(s)}</span></div>`).join('')}
+      ${t.parentId ? '' : `<input class="e-add" data-add="sub:${t.id}" placeholder="+ Sub-task">`}
+      <div class="e-row">${ev ? `<button class="e-btn" data-e="m-unplace">Take out of ${esc(ev.title)}</button>` : ''}${!t.parentId && t.date !== null ? '<button class="e-btn" data-e="m-someday">Send to Someday</button>' : ''}${!t.parentId && t.date === null ? '<button class="e-btn" data-e="m-today">Do today</button>' : ''}<button class="e-btn del push" data-e="m-del">Delete</button></div>
+      <div class="e-tip" style="margin:10px 0 0">To date or place it, close this and drag it.</div>`;
+  } else {
+    const e = evById(m.id); if (!e) { S.menu = null; return ''; }
+    body = `<input class="e-in title" data-m="title" value="${esc(e.title)}"><div class="small mute" style="margin-top:6px">${dayLabel(e.date)}${e.recurId ? ' · ↻ changes this Occurrence only' : ''}</div>
+      <div class="e-row"><label>Start<input type="time" class="e-in" data-m="start" value="${hm(e.start)}"></label><label>End<input type="time" class="e-in" data-m="end" value="${hm(e.end)}"></label></div>
+      <div class="e-row"><button class="e-btn del push" data-e="m-del">Delete</button></div>
+      <div class="e-tip" style="margin:10px 0 0">To move it to another day, drag it onto a day in the strip. Its placed Tasks come along.</div>`;
+  }
+  return `<div class="sheet-bg" data-e="close"></div><div class="sheet"><div class="grab"></div>${body}</div>`;
+}
+function inlineAdd(inp) {
+  const v = inp.value.trim(); if (!v) return;
+  const key = inp.dataset.add, [k, x] = key.split(':'); let r, msg;
+  if (k === 'd') { r = M.addTask({ title: v, date: +x }); msg = `Added “${v}” · ${dayLabel(+x)}`; }
+  else if (k === 'e') { r = M.addTask({ title: v, eventId: x }); msg = `Added “${v}” in ${evById(x).title}`; }
+  else if (k === 'S') { r = M.addTask({ title: v, date: null }); msg = `Added “${v}” to Someday`; }
+  else if (k === 'sub') { r = M.addTask({ title: v, parentId: x }); msg = `Added Sub-task “${v}”`; }
+  else if (k === 'ev') { const p = parseLine(v); r = p.start === undefined ? 'Give the Event a time, e.g. Gym 18-19' : !p.title ? 'Give it a title' : M.addEvent({ title: p.title, date: p.date ?? +x, start: p.start, end: p.end }); msg = `Added Event “${p.title}”`; }
+  if (!okOrFlash(r, msg)) return;
+  render();
+  const again = document.querySelector(`[data-add="${key}"]`); if (again) again.focus();
+}
+let drag = null, justDragged = false;
+function validDrop(tg) { return drag.kind === 't' ? true : tg.startsWith('d:'); }
+function startDrag(x, y) {
+  drag.on = true; document.body.classList.add('e-dragging');
+  const g = document.createElement('div'); g.className = 'e-ghost'; g.id = 'eghost'; g.textContent = (drag.kind === 'e' ? '▪ ' : '○ ') + drag.label; document.body.appendChild(g);
+  if (navigator.vibrate) navigator.vibrate(15); moveDrag(x, y);
+}
+function moveDrag(x, y) {
+  const g = document.getElementById('eghost'); g.style.left = x + 12 + 'px'; g.style.top = y + 12 + 'px';
+  document.querySelectorAll('.e-over').forEach(n => n.classList.remove('e-over'));
+  const el = document.elementFromPoint(x, y)?.closest('[data-drop]');
+  drag.target = el && validDrop(el.dataset.drop) ? el.dataset.drop : null; if (drag.target) el.classList.add('e-over');
+}
+function endDrag() {
+  if (!drag) return; clearTimeout(drag.timer);
+  const d = drag; drag = null; if (!d.on) return;
+  document.getElementById('eghost')?.remove(); document.body.classList.remove('e-dragging');
+  justDragged = true; setTimeout(() => justDragged = false, 80);
+  if (d.target) dropOn(d.kind, d.id, d.target);
+  render();
+}
+function dropOn(kind, id, tg) {
+  const [k, v] = tg.split(':');
+  if (kind === 'e') { const e = evById(id); return okOrFlash(M.editEvent(e, { date: +v }), `Moved “${e.title}” to ${dayLabel(+v)}${placedIn(e.id).length ? ' with its placed Tasks' : ''}`); }
+  const t = tById(id);
+  if (k === 'e') { const e = evById(v); return okOrFlash(M.place(t, e), `Placed “${t.title}” in ${e.title} · ${dayLabel(e.date)}`); }
+  if (k === 'd') { const r = M.date(t, +v); if (!r) M.unplace(t); return okOrFlash(r, `“${t.title}” → ${dayLabel(+v)}, not placed`); }
+  if (tg === 'S') return okOrFlash(M.date(t, null), `“${t.title}” → Someday`);
+}
+document.addEventListener('pointerdown', e => {
+  if (cur !== 'E3' || e.button > 0 || S.menu) return;
+  const src = e.target.closest('#app [data-drag]'); if (!src || e.target.closest('input,select,[data-tick],[data-act]')) return;
+  const [kind, id] = src.dataset.drag.split(':'), x = kind === 't' ? tById(id) : evById(id);
+  drag = { kind, id, x0: e.clientX, y0: e.clientY, on: false, touch: e.pointerType !== 'mouse', label: x.title };
+  if (drag.touch) drag.timer = setTimeout(() => drag && startDrag(drag.x0, drag.y0), 380);
+});
+document.addEventListener('pointermove', e => {
+  if (!drag) return;
+  if (drag.on) return moveDrag(e.clientX, e.clientY);
+  if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 7) { if (drag.touch) { clearTimeout(drag.timer); drag = null; } else startDrag(e.clientX, e.clientY); }
+});
+document.addEventListener('touchmove', e => { if (drag?.on) { e.preventDefault(); const t = e.touches[0]; moveDrag(t.clientX, t.clientY); } }, { passive: false });
+document.addEventListener('pointerup', endDrag);
+document.addEventListener('touchend', endDrag);
+document.addEventListener('contextmenu', e => { if (drag) e.preventDefault(); });
+document.addEventListener('pointercancel', () => { if (drag && !drag.on) { clearTimeout(drag.timer); drag = null; } });
+document.addEventListener('click', e => { if (justDragged) { e.stopPropagation(); e.preventDefault(); } }, true);
+
+/* ---------- E wiring ---------- */
+document.body.insertAdjacentHTML('beforeend', `<div id="ebar"><input id="eline" autocomplete="off" spellcheck="false" placeholder="Add anything… “Buy milk tomorrow” · “Gym 18-19 fri” · “Stamps @errands”"><div id="epv"></div><div id="ehint"></div></div><button id="efab" data-e="new" title="Add">+</button><div id="esheet"></div><div id="etoast"></div>`);
+function openItem(k, id) {
+  if (cur === 'E1') { E1ed = { k, id }; const i = document.getElementById('eline'); i.value = serialize(k, id); i.focus(); e1Preview(); return; }
+  if (cur === 'E2') openDraft(k, id); else S.menu = { k, id };
+  render();
+}
+document.addEventListener('click', e => {
+  if (!cur.startsWith('E') || e.target.closest('[data-tick],[data-sel],[data-tab],[data-act],input,select,label')) return;
+  const dc = e.target.closest('[data-d]'); if (dc) { const i = dc.dataset.d.indexOf(':'); draftSet(dc.dataset.d.slice(0, i), dc.dataset.d.slice(i + 1)); return render(); }
+  const b = e.target.closest('[data-e]');
+  if (b) {
+    const a = b.dataset.e, m = S.menu, mt = m && (m.k === 't' ? tById(m.id) : evById(m.id));
+    if (a === 'new') openDraft();
+    else if (a === 'close') { S.draft = null; S.menu = null; }
+    else if (a === 'd-save') saveDraft();
+    else if (a === 'd-del') { const D = S.draft; D.kind === 't' ? M.delTask(tById(D.id)) : M.delEvent(evById(D.id)); flash(`Deleted “${D.title}”`); S.draft = null; }
+    else if (a === 'opensub') openDraft('t', b.dataset.id);
+    else if (a === 'e1del') { const x = E1ed; x.k === 't' ? M.delTask(tById(x.id)) : M.delEvent(evById(x.id)); flash('Deleted'); E1ed = null; document.getElementById('eline').value = ''; }
+    else if (a === 'm-unplace') { M.unplace(mt); flash(`“${mt.title}” is no longer placed`); }
+    else if (a === 'm-someday') { okOrFlash(M.date(mt, null), `“${mt.title}” → Someday`); S.menu = null; }
+    else if (a === 'm-today') { M.date(mt, S.day); flash(`“${mt.title}” → Today`); S.menu = null; }
+    else if (a === 'm-del') { m.k === 't' ? M.delTask(mt) : M.delEvent(mt); flash(`Deleted “${mt.title}”`); S.menu = null; }
+    return render();
+  }
+  const o = e.target.closest('#app [data-open], #esheet [data-open]'); if (o) { const [k, id] = o.dataset.open.split(':'); openItem(k, id); }
+});
+document.addEventListener('input', e => {
+  if (e.target.id === 'eline') return e1Preview();
+  const f = e.target.dataset.dfield; if (!f || !S.draft) return;
+  if (f === 'pickdate') { if (e.target.value) { draftSet('date', isoDay(e.target.value)); render(); } return; }
+  S.draft[f] = e.target.value;
+  if (f === 'parentId') { draftSet('parentId', e.target.value || null); render(); }
+});
+document.addEventListener('change', e => {
+  const f = e.target.dataset.m, m = S.menu; if (!f || !m) return;
+  const x = m.k === 't' ? tById(m.id) : evById(m.id), v = e.target.value;
+  if (f === 'title' && v.trim()) { x.title = v.trim(); flash('Renamed'); }
+  if (f === 'start' || f === 'end') { const r = M.editEvent(x, { [f]: toMin(v) }); okOrFlash(r, `“${x.title}” now ${hm(x.start)}–${hm(x.end)}`); }
+  render();
+});
+document.addEventListener('keydown', e => {
+  if (!cur.startsWith('E')) return;
+  if (e.key === 'Escape') { if (E1ed || e.target.id === 'eline') { E1ed = null; document.getElementById('eline').value = ''; e1Preview(); } S.draft = null; S.menu = null; render(); return; }
+  if (e.key === 'Enter' && e.target.id === 'eline') return e1Submit();
+  if (e.key === 'Enter' && e.target.dataset.add) { e.preventDefault(); return inlineAdd(e.target); }
+  if (e.key === 'Enter' && e.target.dataset.dfield === 'title') { saveDraft(); return render(); }
+  if (e.key === 'Enter' && e.target.dataset.m) return e.target.blur();
+  if (e.key === '/' && cur === 'E1' && !e.target.closest('input,textarea,select')) { e.preventDefault(); document.getElementById('eline').focus(); }
+});
+const renderBase = render;
+render = function () {
+  if (!cur.startsWith('E')) { S.draft = null; S.menu = null; E1ed = null; }
+  const ae = document.activeElement, keep = ae && ae.matches && ae.matches('#app input, #esheet input') ? { sel: ['add', 'dfield', 'm'].map(k => ae.dataset[k] && `[data-${k}="${ae.dataset[k]}"]`).find(Boolean), v: ae.value, c: ae.selectionStart } : null;
+  renderBase();
+  const em = cur.startsWith('E');
+  document.body.classList.toggle('emode', em); document.body.classList.toggle('e3', cur === 'E3');
+  document.getElementById('ebar').style.display = cur === 'E1' ? 'block' : 'none'; if (cur === 'E1') e1Preview();
+  document.getElementById('efab').style.display = cur === 'E2' && !S.draft ? 'grid' : 'none';
+  const sh = document.getElementById('esheet'), html = cur === 'E2' ? sheetE2() : cur === 'E3' ? menuE3() : '';
+  if (sh.dataset.html !== html) { const fresh = !sh.dataset.html; sh.innerHTML = html; sh.dataset.html = html; if (fresh) sh.querySelector('[autofocus]')?.focus(); }
+  if (keep && keep.sel) { const n = document.querySelector(keep.sel); if (n && n !== document.activeElement) { if (n.type !== 'date') n.value = keep.v; n.focus(); try { n.setSelectionRange(keep.c, keep.c); } catch {} } }
+  const to = document.getElementById('etoast'); to.style.display = S.toast ? 'block' : 'none'; to.textContent = S.toast || '';
+  if (em) {
+    const ps = document.getElementById('pstate'), dump = JSON.parse(ps.textContent);
+    dump.upcoming = S.tasks.filter(t => t.date > S.day && !t.skipped).map(t => `${dayLabel(t.date)}: ${t.parentId ? '↳ ' : ''}${t.title}${t.eventId ? ' @' + evById(t.eventId).title : ''}`);
+    dump.someday = someday().map(t => t.title + (subsOf(t.id).length ? ` (${subsOf(t.id).length} subs)` : ''));
+    dump.editing = S.draft || S.menu || E1ed || null; dump.log = (S.log || []).slice(-8);
+    ps.textContent = JSON.stringify(dump, null, 1);
+  }
+};
+
 reset();
 const tq = new URLSearchParams(location.search).get('t'); // e.g. ?t=17:20 to open at a given time
 if (tq) { const [h, m] = tq.split(':').map(Number); S.time = h * 60 + (m || 0); }
