@@ -79,6 +79,14 @@ export function materialise(state: State, dates: DateStr[], now: Now): Changes {
   return { inserts, updates: [], deletes: [] };
 }
 
+/** Whether "Repeat…" is offered: an open Task or an Event (not a Sub-task, not a done Task) that does not already repeat. */
+export function canRepeat(state: State, id: string): boolean {
+  const task = liveTask(state, id);
+  if (task) return !task.parent_id && !task.series_id && !isDone(state, task);
+  const event = findEvent(state, id);
+  return !!event && !event.series_id;
+}
+
 const isInt = (n: unknown, min: number, max: number): n is number => Number.isInteger(n) && (n as number) >= min && (n as number) <= max;
 
 /** The series columns for a rule, or null when the rule is not valid. */
@@ -118,9 +126,9 @@ function coalesce(updates: Update[]): Update[] {
 export function setRecurrence(state: State, cmd: Extract<Command, { type: 'setRecurrence' }>, now: Now): Changes {
   const columns = ruleColumns(cmd.recurrence);
   if (!columns || state.series.some((s) => s.id === cmd.seriesId)) return noChanges();
+  if (!canRepeat(state, cmd.id)) return noChanges();
   const task = liveTask(state, cmd.id);
   const event = task ? undefined : findEvent(state, cmd.id);
-  if (task ? task.parent_id || task.series_id || isDone(state, task) : !event || event.series_id) return noChanges();
 
   const todayDate = today(now);
   const own = (task ? task.date : event!.date) ?? null;

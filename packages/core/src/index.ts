@@ -7,5 +7,7 @@ export { SCHEMA, type ColumnType } from './schema.ts';
 export { checkEventTimes, parseEventInput, type ParsedEvent } from './event-input.ts';
 export { occurrenceDates, weekdaysOf } from './recurrence.ts';
 export { occurrenceId, occurrenceSubtaskId } from './ids.ts';
-export { materialise } from './series.ts';
+
 export { recurrenceLabel } from './recurrence.ts';
+export { canRepeat } from './series.ts';
+export { materialise } from './series.ts';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apply, applyChanges, dayView, occurrenceId, type Command, type RecurrenceRule, type State } from '../src/index.ts';
+import { apply, applyChanges, canRepeat, dayView, occurrenceId, type Command, type RecurrenceRule, type State } from '../src/index.ts';
 import { MON_10_15, TODAY, aState, aTask, anEvent } from './helpers.ts';
 
 const run = (state: State, command: Command) => applyChanges(state, apply(state, command, MON_10_15));
@@ -209,5 +209,23 @@ describe('how a recurring item looks', () => {
     const after = repeat(state, 'e', { rule: 'weekdays', weekdays: [1, 4] });
 
     expect(dayView(after, TODAY, MON_10_15).next?.events[0]?.recurrence).toBe('Mon/Thu');
+  });
+});
+
+describe('whether "Repeat…" is offered', () => {
+  const state = aState({
+    events: [anEvent({ id: 'e' }), anEvent({ id: 'rec-e', series_id: 'x', occurrence_date: TODAY })],
+    tasks: [
+      aTask({ id: 't' }),
+      aTask({ id: 'someday', date: null }),
+      aTask({ id: 'sub', parent_id: 't', date: null }),
+      aTask({ id: 'done', completed_at: MON_10_15 }),
+      aTask({ id: 'rec', series_id: 'x', occurrence_date: TODAY }),
+    ],
+  });
+
+  it('is for open Tasks, Someday Tasks and Events that do not already repeat', () => {
+    expect(['t', 'someday', 'e'].map((id) => canRepeat(state, id))).toEqual([true, true, true]);
+    expect(['sub', 'done', 'rec', 'rec-e', 'nope'].map((id) => canRepeat(state, id))).toEqual([false, false, false, false, false]);
   });
 });
