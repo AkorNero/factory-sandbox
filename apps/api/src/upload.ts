@@ -79,25 +79,35 @@ function toPg(value: unknown, udt: string, where: string): unknown {
 
 const q = (ident: string) => `"${ident.replaceAll('"', '""')}"`;
 
+/** Held for the length of a batch, so a DELETE and a replayed PUT can never interleave. One user: uploads are small and rare. */
+const UPLOAD_LOCK = 7_281_429;
+
 /**
  * Apply a batch in one transaction. Every operation is idempotent, so a resent batch changes nothing.
  *  - PUT   upserts by id and writes only the columns it carries.
  *  - PATCH updates only the columns it carries; on a row that no longer exists it does nothing (a delete wins).
- *  - DELETE hard-deletes by id.
+ *  - DELETE hard-deletes by id and leaves a tombstone (deleted_rows), so a PUT or PATCH that is resent or arrives late
+ *    for that id is skipped instead of bringing the row back: deletes win over updates.
  * Per-column last write wins by arrival: each statement writes just its own columns.
  */
 export async function applyOps(pool: pg.Pool, ops: Op[], catalog: Catalog): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [UPLOAD_LOCK]);
     for (const [i, op] of ops.entries()) {
       const types = catalog.get(op.table)!;
       const cols = Object.keys(op.data ?? {});
       const values = cols.map((c) => toPg(op.data![c], types.get(c)!, `op ${i} ${c}`));
       const table = q(op.table);
       if (op.op === 'DELETE') {
+        await client.query('INSERT INTO deleted_rows (table_name, id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [op.table, op.id]);
         await client.query(`DELETE FROM ${table} WHERE id = $1`, [op.id]);
-      } else if (op.op === 'PATCH') {
+        continue;
+      }
+      const tombstone = await client.query('SELECT 1 FROM deleted_rows WHERE table_name = $1 AND id = $2', [op.table, op.id]);
+      if (tombstone.rowCount) continue;
+      if (op.op === 'PATCH') {
         if (cols.length === 0) continue;
         const sets = cols.map((c, k) => `${q(c)} = $${k + 2}::${types.get(c)}`).join(', ');
         await client.query(`UPDATE ${table} SET ${sets} WHERE id = $1`, [op.id, ...values]);

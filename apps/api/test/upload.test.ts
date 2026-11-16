@@ -15,7 +15,7 @@ afterAll(async () => {
   await pool.end();
 });
 beforeEach(async () => {
-  await pool.query('TRUNCATE events, tasks, series, routines');
+  await pool.query('TRUNCATE events, tasks, series, routines, deleted_rows');
 });
 
 const task = async (id: string) => (await pool.query('SELECT * FROM tasks WHERE id = $1', [id])).rows[0];
@@ -117,6 +117,67 @@ describe('the upload endpoint', () => {
 
       expect(res.statusCode).toBe(200);
       expect(await task('t1')).toBeUndefined();
+    });
+  });
+
+  describe('a delete that is followed by resent operations', () => {
+    it('keeps the row gone when the earlier PUT is replayed', async () => {
+      const put = { op: 'PUT' as const, table: 'tasks', id: 't1', data: taskRow() };
+      await upload(app, [put]);
+      await upload(app, [{ op: 'DELETE', table: 'tasks', id: 't1' }]);
+
+      const replay = await upload(app, [put]);
+
+      expect(replay.statusCode).toBe(200);
+      expect(await task('t1')).toBeUndefined();
+    });
+
+    it('keeps the row gone when the whole earlier batch (PUT, PATCH) is replayed', async () => {
+      const batch = [
+        { op: 'PUT' as const, table: 'tasks', id: 't1', data: taskRow() },
+        { op: 'PATCH' as const, table: 'tasks', id: 't1', data: { title: 'Edited' } },
+      ];
+      await upload(app, batch);
+      await upload(app, [{ op: 'DELETE', table: 'tasks', id: 't1' }]);
+
+      await upload(app, batch);
+
+      expect(await task('t1')).toBeUndefined();
+    });
+
+    it('wins even when the DELETE arrives before the PUT it follows (operations can arrive out of order)', async () => {
+      await upload(app, [{ op: 'DELETE', table: 'tasks', id: 't1' }]);
+
+      await upload(app, [{ op: 'PUT', table: 'tasks', id: 't1', data: taskRow() }]);
+
+      expect(await task('t1')).toBeUndefined();
+    });
+
+    it('skips only the deleted row: the rest of the batch is applied', async () => {
+      await upload(app, [{ op: 'DELETE', table: 'tasks', id: 't1' }]);
+
+      const res = await upload(app, [
+        { op: 'PUT', table: 'tasks', id: 't1', data: taskRow() },
+        { op: 'PUT', table: 'tasks', id: 't2', data: taskRow({ title: 'Other' }) },
+      ]);
+
+      expect(res.statusCode).toBe(200);
+      expect(await task('t1')).toBeUndefined();
+      expect(await task('t2')).toMatchObject({ title: 'Other' });
+    });
+
+    it('is per table: the same id in another table is not affected', async () => {
+      await upload(app, [{ op: 'DELETE', table: 'tasks', id: 'x' }]);
+
+      await upload(app, [{ op: 'PUT', table: 'events', id: 'x', data: { title: 'Gym', date: '2026-11-16', start_time: '18:00', end_time: '19:00', created_at: 'a', updated_at: 'a' } }]);
+
+      expect((await pool.query('SELECT title FROM events WHERE id = $1', ['x'])).rows).toEqual([{ title: 'Gym' }]);
+    });
+
+    it('is not something a device can write to: deleted_rows is not an uploadable table', async () => {
+      const res = await upload(app, [{ op: 'PUT', table: 'deleted_rows', id: 'x', data: { table_name: 'tasks' } }]);
+
+      expect(res.statusCode).toBe(400);
     });
   });
 
