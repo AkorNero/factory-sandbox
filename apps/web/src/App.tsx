@@ -3,6 +3,7 @@ import { useStatus } from '@powersync/react';
 import type { AbstractPowerSyncDatabase } from '@powersync/web';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { Clock } from './clock.ts';
+import { DayTabs, EventMenu, NowAndNext } from './Events.tsx';
 import { runCommand, useStoreState } from './store/adapter.ts';
 
 /** Local calendar math for labels only: dates are plain strings, so go through UTC to avoid timezone shifts. */
@@ -14,8 +15,11 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
   const [now, setNow] = useState(() => clock.now());
   useEffect(() => clock.subscribe(() => setNow(clock.now())), [clock]);
 
+  const [menuId, setMenuId] = useState<string | null>(null);
   const date = today(now);
   const view = useMemo(() => (state ? dayView(state, date, now) : null), [state, date, now]);
+
+  const menuEvent = state?.events.find((e) => e.id === menuId) ?? null;
 
   return (
     <main className="main">
@@ -26,9 +30,27 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
       {view && (
         <>
           <Strip days={view.strip} selected={view.date} />
+          <NowAndNext view={view} open={setMenuId} />
           <Anytime view={view} onAdd={(title) => runCommand(db, { type: 'addTask', id: crypto.randomUUID(), title, date }, clock.now())} />
           <DoneToday view={view} />
+          <DayTabs
+            view={view}
+            open={setMenuId}
+            onAdd={(title, start, end) => runCommand(db, { type: 'addEvent', id: crypto.randomUUID(), title, date, start, end }, clock.now())}
+          />
         </>
+      )}
+      {menuEvent && (
+        <EventMenu
+          key={menuEvent.id}
+          event={menuEvent}
+          onClose={() => setMenuId(null)}
+          onSave={async (title, start, end) => {
+            await runCommand(db, { type: 'renameEvent', id: menuEvent.id, title }, clock.now());
+            await runCommand(db, { type: 'setEventTimes', id: menuEvent.id, start, end }, clock.now());
+          }}
+          onDelete={() => runCommand(db, { type: 'deleteEvent', id: menuEvent.id }, clock.now())}
+        />
       )}
     </main>
   );
