@@ -1,4 +1,4 @@
-import { dateTask, findEvent, isDone, liveTask, moveEvent, nextPosition, subtasksOf } from './commands.ts';
+import { dateTask, findEvent, isDone, liveTask, setEventDay, nextPosition, subtasksOf } from './commands.ts';
 import { addDays, today } from './dates.ts';
 import { occurrenceId, occurrenceSubtaskId } from './ids.ts';
 import { occurrenceDates } from './recurrence.ts';
@@ -168,7 +168,7 @@ export function setRecurrence(state: State, cmd: Extract<Command, { type: 'setRe
     updates.push({ table: 'tasks', id: task.id, set: link });
     for (const s of subs) updates.push({ table: 'tasks', id: s.id, set: { series_subtask_key: s.id, updated_at: now } });
   } else {
-    if (event!.date !== first) updates.push(...moveEvent(state, event!.id, first, now).updates);
+    if (event!.date !== first) updates.push(...setEventDay(state, event!.id, first, now).updates);
     updates.push({ table: 'events', id: event!.id, set: link });
   }
   return { inserts, updates: coalesce(updates), deletes: [] };
