@@ -76,6 +76,19 @@ test('"Pick a day" adds a later day to the strip until its ✕ removes it', asyn
   await expect(heading(page)).toHaveText('Monday 16 November');
 });
 
+test('a picked day stays on the strip after a reload, until its ✕ removes it', async ({ page }) => {
+  await page.getByLabel('Day to add to the strip').fill('2026-11-25');
+  await expect(strip(page).locator('.chip')).toHaveCount(9);
+
+  await page.reload();
+  await expect(strip(page).locator('.chip')).toHaveCount(9);
+  await expect(chip(page, /Wednesday 25 November/)).toBeVisible();
+
+  await page.getByRole('button', { name: 'Remove 25 November' }).click();
+  await page.reload();
+  await expect(strip(page).locator('.chip')).toHaveCount(8);
+});
+
 test('dragging a Task onto a day chip dates it there and clears its Placement', async ({ page }) => {
   await type(page, '+ Event, e.g. Gym 18-19', 'Deep work 10-11');
   await type(page, '+ Task in Deep work', 'Write intro');

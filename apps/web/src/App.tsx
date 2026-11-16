@@ -47,7 +47,9 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
   const todayDate = today(now);
   // the day opened from the strip; Today until one is tapped (a day that has passed falls back to Today)
   const [opened, setOpened] = useState<string | null>(null);
-  const [picked, setPicked] = useState<string[]>([]);
+  // days added with "Pick a day": kept on this device until their ✕ removes them
+  const [picked, setPicked] = useState<string[]>(() => readPicked());
+  useEffect(() => writePicked(picked), [picked]);
   const date = opened && opened > todayDate ? opened : todayDate;
   const view = useMemo(() => (state ? dayView(state, date, now, picked) : null), [state, date, now, picked]);
   // Occurrences are real rows: make the ones for the days on screen (the strip and the day opened) that do not exist yet.
@@ -306,6 +308,24 @@ const writeDismissed = (date: string) => {
     localStorage.setItem(DISMISSED_KEY, date);
   } catch {
     /* the banner just comes back on reload */
+  }
+};
+
+/** The picked days are kept per device too. The core decides which of them still count (a day that has passed drops off). */
+const PICKED_KEY = 'picked-days';
+const readPicked = (): string[] => {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(PICKED_KEY) ?? '[]');
+    return Array.isArray(stored) ? stored.filter((d): d is string => typeof d === 'string') : [];
+  } catch {
+    return [];
+  }
+};
+const writePicked = (days: string[]) => {
+  try {
+    localStorage.setItem(PICKED_KEY, JSON.stringify(days));
+  } catch {
+    /* the picked days just go on reload */
   }
 };
 
