@@ -7,6 +7,8 @@ export interface ItemView {
   parentTitle: string | null;
   carriedOver: boolean;
   recurring: boolean;
+  /** A Task with no date: it is in Someday. */
+  someday: boolean;
   /** 'HH:MM' of the Completion time, for done items. */
   completedTime: string | null;
   /** The Event it is placed in; null when Unplaced. */
@@ -170,6 +172,7 @@ export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateS
     parentTitle: t.parent_id ? (byId.get(t.parent_id)?.title ?? null) : null,
     carriedOver: t.carried_over,
     recurring: t.series_id !== null,
+    someday: t.parent_id === null && t.date === null,
     completedTime: t.completed_at ? timeOf(t.completed_at) : null,
     placement: placedIn(t) ? { eventId: t.event_id!, title: placedIn(t)!.title } : null,
     doneIn: t.completed_at ? (doneInEvent(t, events)?.title ?? null) : null,

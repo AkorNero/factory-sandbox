@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 
 /**
- * Drag a Task onto an Event, a day chip or Anytime, or an Event onto a day chip. Mouse: the drag starts once the pointer has moved a few pixels.
+ * Drag a Task onto an Event, a day chip, Anytime or the Someday tab, or an Event onto a day chip.
+ * Mouse: the drag starts once the pointer has moved a few pixels.
  * Touch: press and hold starts it; a finger that moves before the hold is up is a scroll and the page scrolls normally.
  * No rules in here: the core is asked whether a drop is allowed, and told what was dropped.
  *
@@ -20,12 +21,17 @@ export interface DragSource {
   label: string;
 }
 
-/** What a drop target is: an Event, a day chip, or the Anytime block of the day shown. */
-export type DropTarget = { kind: 'event'; id: string } | { kind: 'day'; date: string } | { kind: 'anytime' };
+/** What a drop target is: an Event, a day chip, the Anytime block of the day shown, or the Someday tab. */
+export type DropTarget =
+  | { kind: 'event'; id: string }
+  | { kind: 'day'; date: string }
+  | { kind: 'anytime' }
+  | { kind: 'someday' };
 
 /** The `data-drop` value of a target, and back. */
 export const parseDrop = (value: string): DropTarget | null => {
   if (value === 'anytime') return { kind: 'anytime' };
+  if (value === 'someday') return { kind: 'someday' };
   if (value.startsWith('event:')) return { kind: 'event', id: value.slice(6) };
   if (value.startsWith('day:')) return { kind: 'day', date: value.slice(4) };
   return null;
@@ -50,6 +56,8 @@ export const useDrag = () => useContext(DragContext);
 export const eventDrop = (eventId: string) => ({ 'data-drop': `event:${eventId}` });
 export const dayDrop = (date: string) => ({ 'data-drop': `day:${date}` });
 export const anytimeDrop = { 'data-drop': 'anytime' };
+
+export const somedayDrop = { 'data-drop': 'someday' };
 
 interface Press {
   source: DragSource;

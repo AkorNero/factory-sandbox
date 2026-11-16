@@ -318,3 +318,18 @@ body[data-dragging] [data-drop-over] {
   padding: 8px 16px;
   font-size: 14px;
 }
+
+/* Someday: set apart from the day with a dashed outline and an italic title. */
+.seg button.someday {
+  font-style: italic;
+}
+.panel.someday {
+  background: transparent;
+  border-style: dashed;
+}
+.panel .note {
+  color: var(--mute);
+  font-size: 12px;
+  font-style: italic;
+  margin: 8px 0 4px;
+}

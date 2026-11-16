@@ -4,6 +4,7 @@ import {
   canMoveEvent,
   canPickDay,
   canPlace,
+  canUndate,
   dayView,
   today,
   type Command,
@@ -73,6 +74,9 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
         } else if (target.kind === 'event') {
           await run({ type: 'placeTask', id: source.id, eventId: target.id });
           setToast(`Placed “${source.label}” in ${eventTitle(target.id)}`);
+        } else if (target.kind === 'someday') {
+          await run({ type: 'undateTask', id: source.id });
+          setToast(`Sent “${source.label}” to Someday`);
         } else {
           const to = target.kind === 'day' ? target.date : date;
           await run({ type: 'dateTask', id: source.id, date: to });
@@ -117,12 +121,15 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
               onOpen={setMenuId}
             />
             <DoneToday view={view} onTick={tick} onOpen={setMenuId} />
-            {menuItem && <TaskMenu item={menuItem} onClose={() => setMenuId(null)} run={run} />}
+            {menuItem && (
+              <TaskMenu item={menuItem} canSend={canUndate(state!, menuItem.id)} today={todayDate} onClose={() => setMenuId(null)} run={run} />
+            )}
             {view.isToday && (
               <DayTabs
                 view={view}
                 actions={actions}
                 onAdd={(title, start, end) => run({ type: 'addEvent', id: crypto.randomUUID(), title, date, start, end })}
+                onAddSomeday={(title) => run({ type: 'addTask', id: crypto.randomUUID(), title, date: null })}
               />
             )}
           </>
@@ -152,6 +159,7 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
 /** Everything on screen the tap menu can be opened for. */
 const everyItem = (view: DayView): ItemView[] => [
   ...view.anytime.items,
+  ...view.someday.items,
   ...view.done.items,
   ...view.now.cards.flatMap((c) => c.tasks),
   ...(view.next?.events.flatMap((e) => e.tasks) ?? []),
@@ -179,6 +187,8 @@ function canDrop(state: State, shown: string, source: DragSource, target: DropTa
       return canDateTask(state, source.id, target.date);
     case 'anytime':
       return canDateTask(state, source.id, shown);
+    case 'someday':
+      return canUndate(state, source.id);
   }
 }
 
@@ -316,7 +326,20 @@ function DoneToday({ view, ...actions }: { view: DayView } & ItemActions) {
 }
 
 /** Tap menu (bottom sheet): rename, edit the Completion time of a done item, delete. */
-function TaskMenu({ item, onClose, run }: { item: ItemView; onClose: () => void; run: (c: Command) => Promise<unknown> }) {
+function TaskMenu({
+  item,
+  canSend,
+  today,
+  onClose,
+  run,
+}: {
+  item: ItemView;
+  /** The core says this Task can be sent to Someday. */
+  canSend: boolean;
+  today: string;
+  onClose: () => void;
+  run: (c: Command) => Promise<unknown>;
+}) {
   const [title, setTitle] = useState(item.title);
   const [time, setTime] = useState(item.completedTime ?? '');
   const save = async (e: FormEvent) => {
@@ -331,6 +354,14 @@ function TaskMenu({ item, onClose, run }: { item: ItemView; onClose: () => void;
   };
   const takeOut = async () => {
     await run({ type: 'unplaceTask', id: item.id });
+    onClose();
+  };
+  const sendToSomeday = async () => {
+    await run({ type: 'undateTask', id: item.id });
+    onClose();
+  };
+  const doToday = async () => {
+    await run({ type: 'dateTask', id: item.id, date: today });
     onClose();
   };
   return (
@@ -354,6 +385,16 @@ function TaskMenu({ item, onClose, run }: { item: ItemView; onClose: () => void;
           {item.placement && (
             <button type="button" onClick={takeOut}>
               Take out of {item.placement.title}
+            </button>
+          )}
+          {item.someday && (
+            <button type="button" onClick={doToday}>
+              Do today
+            </button>
+          )}
+          {canSend && (
+            <button type="button" onClick={sendToSomeday}>
+              Send to Someday
             </button>
           )}
           <button type="button" className="danger" onClick={remove}>Delete</button>
