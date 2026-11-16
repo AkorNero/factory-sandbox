@@ -94,20 +94,33 @@ export function canRepeat(state: State, id: string): boolean {
 
 const isInt = (n: unknown, min: number, max: number): n is number => Number.isInteger(n) && (n as number) >= min && (n as number) <= max;
 
-/** The series columns for a rule, or null when the rule is not valid. */
-export function ruleColumns(r: RecurrenceRule): Pick<SeriesRow, 'rule' | 'interval_n' | 'weekdays' | 'day_of_month'> | null {
+/**
+ * Why a rule is not valid, in words the "Repeat…" picker can show; null when it is valid. This is the only place the
+ * limits live: the commands refuse exactly what it rejects.
+ */
+export function checkRecurrence(r: RecurrenceRule): string | null {
   switch (r.rule) {
     case 'every_n_days':
-      return isInt(r.interval, 1, 999) ? { rule: r.rule, interval_n: r.interval, weekdays: null, day_of_month: null } : null;
-    case 'weekdays': {
-      const days = [...new Set(r.weekdays)].sort();
-      const weeks = r.everyWeeks ?? 1;
-      return days.length > 0 && days.every((d) => isInt(d, 1, 7)) && isInt(weeks, 1, 52)
-        ? { rule: r.rule, interval_n: weeks, weekdays: JSON.stringify(days), day_of_month: null }
-        : null;
-    }
+      return isInt(r.interval, 1, 999) ? null : 'Use a whole number of days from 1 to 999.';
+    case 'weekdays':
+      if (r.weekdays.length === 0) return 'Pick at least one weekday.';
+      if (!r.weekdays.every((d) => isInt(d, 1, 7))) return 'Pick weekdays from Monday to Sunday.';
+      return isInt(r.everyWeeks ?? 1, 1, 52) ? null : 'Use a whole number of weeks from 1 to 52.';
     case 'day_of_month':
-      return isInt(r.day, 1, 31) ? { rule: r.rule, interval_n: null, weekdays: null, day_of_month: r.day } : null;
+      return isInt(r.day, 1, 31) ? null : 'Pick a day from 1 to 31.';
+  }
+}
+
+/** The series columns for a rule, or null when the rule is not valid. */
+export function ruleColumns(r: RecurrenceRule): Pick<SeriesRow, 'rule' | 'interval_n' | 'weekdays' | 'day_of_month'> | null {
+  if (checkRecurrence(r) !== null) return null;
+  switch (r.rule) {
+    case 'every_n_days':
+      return { rule: r.rule, interval_n: r.interval, weekdays: null, day_of_month: null };
+    case 'weekdays':
+      return { rule: r.rule, interval_n: r.everyWeeks ?? 1, weekdays: JSON.stringify([...new Set(r.weekdays)].sort()), day_of_month: null };
+    case 'day_of_month':
+      return { rule: r.rule, interval_n: null, weekdays: null, day_of_month: r.day };
   }
 }
 

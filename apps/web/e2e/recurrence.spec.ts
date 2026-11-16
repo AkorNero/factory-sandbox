@@ -44,6 +44,27 @@ test('"Repeat…" on a Task makes Occurrences on later days, marked ↻, that ti
   await expect(page.getByTestId('anytime-count')).toHaveText('1');
 });
 
+test('the "Repeat…" picker shows the core\'s reason for a rule it refuses, and starts nothing', async ({ page }) => {
+  await page.goto('/?db=rec-refused');
+  await type(page, '+ Task today', 'Water plants');
+  await page.getByRole('button', { name: 'Water plants', exact: true }).click();
+  await page.getByRole('button', { name: 'Repeat…' }).click();
+
+  await page.getByLabel('Every (days)').fill('1000');
+  await page.getByRole('button', { name: 'Start repeating' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Use a whole number of days from 1 to 999.');
+
+  await page.getByLabel('Repeat rule').selectOption('weekdays');
+  await page.getByRole('button', { name: 'Start repeating' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Pick at least one weekday.');
+
+  await page.getByLabel('Repeat rule').selectOption('month');
+  await page.getByLabel('Day of the month').fill('32');
+  await page.getByRole('button', { name: 'Start repeating' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Pick a day from 1 to 31.');
+  await expect(page.getByRole('dialog', { name: 'Edit task' })).toBeVisible(); // nothing was applied, the menu stays open
+});
+
 test('"Repeat…" on an Event: weekdays; later Occurrences start with nothing placed in them', async ({ page }) => {
   await page.goto('/?db=rec-event');
   await type(page, '+ Event, e.g. Gym 18-19', 'Gym 18-19');
