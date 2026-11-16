@@ -158,10 +158,10 @@ describe('an Occurrence is a real item', () => {
     expect(after.tasks.find((t) => t.id === mon)?.event_id).toBeNull();
   });
 
-  it('dragging one to another day moves only that one, and it stays linked to its series and original day', () => {
-    const after = run(base(), { type: 'dateTask', id: tue, date: '2026-11-19' });
+  it('dragging one to an earlier day moves only that one, and it stays linked to its series and original day', () => {
+    const after = run(base(), { type: 'dateTask', id: tue, date: '2026-11-15' });
 
-    expect(after.tasks.find((t) => t.id === tue)).toMatchObject({ date: '2026-11-19', series_id: 'daily', occurrence_date: '2026-11-17' });
+    expect(after.tasks.find((t) => t.id === tue)).toMatchObject({ date: '2026-11-15', series_id: 'daily', occurrence_date: '2026-11-17' });
     expect(after.tasks.find((t) => t.id === mon)?.date).toBe('2026-11-16');
   });
 

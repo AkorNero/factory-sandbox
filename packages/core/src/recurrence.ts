@@ -45,6 +45,17 @@ export function occurrenceDates(series: SeriesRow, from: DateStr, to: DateStr): 
   return dates;
 }
 
+/**
+ * Whether the next Occurrence of a Task's series arrives in (after, upTo]: the schedule lands on some day in that
+ * range. Judged by the schedule alone, whether or not that Occurrence has been made yet, so every device agrees.
+ * All segments of the series' lineage count, since a split hands the schedule over to the next segment.
+ */
+export function nextArrivesBy(all: SeriesRow[], seriesId: string, after: DateStr, upTo: DateStr): boolean {
+  const own = all.find((s) => s.id === seriesId);
+  if (!own || upTo <= after) return false;
+  return all.filter((s) => s.lineage_id === own.lineage_id).some((s) => occurrenceDates(s, addDays(after, 1), upTo).length > 0);
+}
+
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
 
