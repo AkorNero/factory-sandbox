@@ -1,0 +1,209 @@
+:root {
+  --bg: #f6f5f2;
+  --card: #fff;
+  --ink: #1d1d1f;
+  --mute: #6b6b70;
+  --line: #e3e1dc;
+  --accent: #2f6fde;
+  --accent-soft: #e6eefc;
+  --warn: #b5560d;
+  --warn-soft: #fdf0e4;
+  --ok: #2f8a4c;
+  --ghost: #9a9aa0;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161618;
+    --card: #202023;
+    --ink: #ececee;
+    --mute: #9a9aa2;
+    --line: #33333a;
+    --accent: #7aa5ff;
+    --accent-soft: #22304d;
+    --warn: #f0a35c;
+    --warn-soft: #3a2a1b;
+    --ok: #6fcf8f;
+    --ghost: #6e6e76;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+.main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 16px 16px 48px;
+}
+.top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+h1 {
+  font-size: 20px;
+  margin: 8px 0 12px;
+}
+.sync {
+  font-size: 12px;
+  color: var(--mute);
+}
+.sync.on {
+  color: var(--ok);
+}
+
+.sec {
+  margin: 20px 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--mute);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.count {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: rgba(127, 127, 127, 0.15);
+  border-radius: 9px;
+  padding: 1px 7px;
+}
+.mute {
+  color: var(--mute);
+  font-size: 12px;
+  margin: 4px 0 8px;
+}
+
+.strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.chip {
+  min-width: 66px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.chip.sel {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+.wd {
+  font-size: 11px;
+  text-transform: uppercase;
+}
+.dn {
+  font-size: 20px;
+  font-weight: 700;
+}
+.dots {
+  font-size: 10px;
+  min-height: 14px;
+  letter-spacing: 1px;
+}
+
+.pills {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.pill.carried {
+  border-color: var(--warn);
+}
+.pill.done {
+  opacity: 0.6;
+}
+.pill.dashed {
+  border-style: dashed;
+  color: var(--accent);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+}
+.tick {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--mute);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+}
+.tick.on {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #fff;
+}
+.badge {
+  font-size: 11px;
+  border-radius: 9px;
+  padding: 1px 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.badge.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.add {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px dashed var(--mute);
+  border-radius: 20px;
+  outline: none;
+}
+.add:focus {
+  border: 1px solid var(--accent);
+}
+
+.meter {
+  height: 8px;
+  background: var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.meter > div {
+  height: 100%;
+  background: var(--ok);
+}
