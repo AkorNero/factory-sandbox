@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 
 /**
- * Drag a Task onto an Event. Mouse: the drag starts once the pointer has moved a few pixels.
+ * Drag a Task onto an Event, or onto the Someday tab. Mouse: the drag starts once the pointer has moved a few pixels.
  * Touch: press and hold starts it; a finger that moves before the hold is up is a scroll and the page scrolls normally.
  * No rules in here: the core is asked whether a drop is allowed, and told what was dropped.
  *
@@ -36,6 +36,10 @@ export const useDrag = () => useContext(DragContext);
 /** Mark an element as a drop target for an Event. The id is what `onDrop` gets back. */
 export const eventDrop = (eventId: string) => ({ 'data-drop': eventId });
 
+/** The drop target id of the Someday tab (Event ids are UUIDs, so it cannot clash). */
+export const SOMEDAY_DROP = 'someday';
+export const somedayDrop = { 'data-drop': SOMEDAY_DROP };
+
 interface Press {
   source: DragSource;
   pointerId: number;
@@ -52,8 +56,8 @@ export function DragProvider({
   onDrop,
   children,
 }: {
-  canDrop: (source: DragSource, eventId: string) => boolean;
-  onDrop: (source: DragSource, eventId: string) => void;
+  canDrop: (source: DragSource, target: string) => boolean;
+  onDrop: (source: DragSource, target: string) => void;
   children: ReactNode;
 }) {
   const latest = useRef({ canDrop, onDrop });

@@ -125,6 +125,10 @@ export type Command =
   | { type: 'placeTask'; id: string; eventId: string }
   /** Take it out of its Event, keeping its day. */
   | { type: 'unplaceTask'; id: string }
+  /** Send a Task to Someday: it loses its date and its Placement. */
+  | { type: 'undateTask'; id: string }
+  /** Give a Task a day ("Do today" is today's date); its Placement is cleared. A Sub-task has no day of its own. */
+  | { type: 'dateTask'; id: string; date: DateStr }
   | { type: 'tickTask'; id: string }
   | { type: 'untickTask'; id: string }
   /** Edit a done Task's Completion time to `time` ('HH:MM') on the day it already has. */

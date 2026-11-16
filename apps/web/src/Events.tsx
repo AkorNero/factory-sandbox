@@ -7,7 +7,7 @@ import {
   type NowCard,
 } from '@dayplanner/core';
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { eventDrop } from './drag.tsx';
+import { eventDrop, somedayDrop } from './drag.tsx';
 import { AddField, TaskRows, type ItemActions } from './Items.tsx';
 import './events.css';
 
@@ -97,34 +97,51 @@ function NowCardView({ card, actions, lead }: { card: NowCard; actions: EventAct
   );
 }
 
-type Tab = 'later' | 'earlier';
+type Tab = 'later' | 'earlier' | 'someday';
 
 export function DayTabs({
   view,
   actions,
   onAdd,
+  onAddSomeday,
 }: {
   view: DayView;
   actions: EventActions;
   onAdd: (title: string, start: string, end: string) => Promise<unknown>;
+  onAddSomeday: (title: string) => Promise<unknown>;
 }) {
   const { open } = actions;
   const [tab, setTab] = useState<Tab>('later');
   const tabs: [Tab, string, number][] = [
     ['later', 'Later today', view.later.count],
     ['earlier', 'Earlier today', view.earlier.count],
+    ['someday', 'Someday', view.someday.count],
   ];
   return (
     <section aria-label="The rest of the day">
       <div className="seg" role="tablist">
         {tabs.map(([id, name, count]) => (
-          <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            className={`${tab === id ? 'on' : ''} ${id === 'someday' ? 'someday' : ''}`}
+            onClick={() => setTab(id)}
+            {...(id === 'someday' ? somedayDrop : {})}
+          >
             {name} <span className="tabcount">{count}</span>
           </button>
         ))}
       </div>
-      <div className="panel" role="tabpanel" data-testid="tab-panel">
-        {tab === 'later' ? (
+      <div className={`panel ${tab === 'someday' ? 'someday' : ''}`} role="tabpanel" data-testid="tab-panel">
+        {tab === 'someday' ? (
+          <>
+            <p className="note">Tasks with no date</p>
+            <TaskRows items={view.someday.items} {...actions} />
+            <AddField placeholder="+ Someday Task" onAdd={onAddSomeday} />
+          </>
+        ) : tab === 'later' ? (
           <>
             {view.later.events.map((e) => (
               <Row
