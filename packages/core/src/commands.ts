@@ -1,4 +1,5 @@
 import { checkEventTimes, normaliseTime } from './event-input.ts';
+import { dateOf } from './dates.ts';
 import type { Changes, Command, DateStr, EventRow, Now, State, TaskRow } from './types.ts';
 import { noChanges } from './types.ts';
 
@@ -251,11 +252,31 @@ function dateTask(state: State, id: string, date: DateStr, now: Now): Changes {
   return updateTask(id, { ...set, updated_at: now });
 }
 
-/** Ticking records the Completion time. A Task that is already done keeps the time it has. */
+/**
+ * Ticking records the Completion time; a Task that is already done keeps the time it has. A Someday Task is also
+ * dated to the day it was ticked, so it shows in that day's Done today. Ticking a Task with Sub-tasks ticks all its
+ * remaining Sub-tasks with the same time; a Someday parent is dated when it becomes done, by either way.
+ */
 function tickTask(state: State, id: string, now: Now): Changes {
   const task = liveTask(state, id);
-  if (!task || task.completed_at) return noChanges();
-  return updateTask(id, { completed_at: now, updated_at: now });
+  if (!task) return noChanges();
+  const subs = state.tasks.filter((t) => t.parent_id === id && !t.deleted_at);
+  const day = { date: dateOf(now) };
+  if (subs.length) {
+    const open = subs.filter((s) => !s.completed_at);
+    if (!open.length) return noChanges();
+    const ticks = open.flatMap((s) => updateTask(s.id, { completed_at: now, updated_at: now }).updates);
+    const dating = task.date === null ? updateTask(id, { ...day, updated_at: now }).updates : [];
+    return { inserts: [], updates: [...ticks, ...dating], deletes: [] };
+  }
+  if (task.completed_at) return noChanges();
+  const set: Record<string, unknown> = { completed_at: now };
+  if (!task.parent_id && task.date === null) set.date = day.date;
+  const parent = task.parent_id ? liveTask(state, task.parent_id) : undefined;
+  const siblings = parent ? state.tasks.filter((t) => t.parent_id === parent.id && !t.deleted_at && t.id !== id) : [];
+  const completesParent = !!parent && parent.date === null && siblings.every((t) => t.completed_at);
+  const dating = completesParent ? updateTask(parent!.id, { ...day, updated_at: now }).updates : [];
+  return { inserts: [], updates: [...updateTask(id, { ...set, updated_at: now }).updates, ...dating], deletes: [] };
 }
 
 /** Unticking clears the Completion time. */
