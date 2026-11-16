@@ -26,7 +26,7 @@ import type { AbstractPowerSyncDatabase } from '@powersync/web';
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { Clock } from './clock.ts';
 import { anytimeDrop, dayDrop, DragProvider, type DragSource, type DropTarget } from './drag.tsx';
-import { DayEvents, DayTabs, EventMenu, NowAndNext, type EventActions } from './Events.tsx';
+import { DayTabs, EventMenu, NowAndNext, type EventActions } from './Events.tsx';
 import { AddField, Pill, label, type ItemActions } from './Items.tsx';
 import { RepeatSection } from './Repeat.tsx';
 import { ScopePrompt, useScopeAsk } from './Scope.tsx';
@@ -47,7 +47,9 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
   const todayDate = today(now);
   // the day opened from the strip; Today until one is tapped (a day that has passed falls back to Today)
   const [opened, setOpened] = useState<string | null>(null);
-  const [picked, setPicked] = useState<string[]>([]);
+  // days added with "Pick a day": kept on this device until their ✕ removes them
+  const [picked, setPicked] = useState<string[]>(() => readPicked());
+  useEffect(() => writePicked(picked), [picked]);
   const date = opened && opened > todayDate ? opened : todayDate;
   const view = useMemo(() => (state ? dayView(state, date, now, picked) : null), [state, date, now, picked]);
   // Occurrences are real rows: make the ones for the days on screen (the strip and the day opened) that do not exist yet.
@@ -136,13 +138,6 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
               />
             )}
             {view.isToday && <NowAndNext view={view} actions={actions} />}
-            {!view.isToday && (
-              <DayEvents
-                view={view}
-                actions={actions}
-                onAdd={(title, start, end) => run({ type: 'addEvent', id: crypto.randomUUID(), title, date, start, end })}
-              />
-            )}
             <Anytime
               view={view}
               dayName={fmt(date, { weekday: 'short' })}
@@ -165,14 +160,12 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
                 run={run}
               />
             )}
-            {view.isToday && (
-              <DayTabs
-                view={view}
-                actions={actions}
-                onAdd={(title, start, end) => run({ type: 'addEvent', id: crypto.randomUUID(), title, date, start, end })}
-                onAddSomeday={(title) => run({ type: 'addTask', id: crypto.randomUUID(), title, date: null })}
-              />
-            )}
+            <DayTabs
+              view={view}
+              actions={actions}
+              onAdd={(title, start, end) => run({ type: 'addEvent', id: crypto.randomUUID(), title, date, start, end })}
+              onAddSomeday={(title) => run({ type: 'addTask', id: crypto.randomUUID(), title, date: null })}
+            />
           </>
         )}
         {menuEvent && (
@@ -215,7 +208,7 @@ function SyncBadge() {
 }
 
 /** Whether a drop is allowed, asked of the core. A drop on Anytime means "the day shown". */
-function canDrop(state: State, shown: string, source: DragSource, target: DropTarget): boolean {
+function canDrop(state: State, shownDay: string, source: DragSource, target: DropTarget): boolean {
   if (source.kind === 'event') return target.kind === 'day' && canMoveEvent(state, source.id, target.date);
   switch (target.kind) {
     case 'event':
@@ -223,7 +216,7 @@ function canDrop(state: State, shown: string, source: DragSource, target: DropTa
     case 'day':
       return canDateTask(state, source.id, target.date);
     case 'anytime':
-      return canDateTask(state, source.id, shown);
+      return canDateTask(state, source.id, shownDay);
     case 'someday':
       return canUndate(state, source.id);
   }
@@ -315,6 +308,24 @@ const writeDismissed = (date: string) => {
     localStorage.setItem(DISMISSED_KEY, date);
   } catch {
     /* the banner just comes back on reload */
+  }
+};
+
+/** The picked days are kept per device too. The core decides which of them still count (a day that has passed drops off). */
+const PICKED_KEY = 'picked-days';
+const readPicked = (): string[] => {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(PICKED_KEY) ?? '[]');
+    return Array.isArray(stored) ? stored.filter((d): d is string => typeof d === 'string') : [];
+  } catch {
+    return [];
+  }
+};
+const writePicked = (days: string[]) => {
+  try {
+    localStorage.setItem(PICKED_KEY, JSON.stringify(days));
+  } catch {
+    /* the picked days just go on reload */
   }
 };
 

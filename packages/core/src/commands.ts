@@ -194,18 +194,30 @@ function deleteEvent(state: State, cmd: Extract<Command, { type: 'deleteEvent' }
   return { inserts: [], updates, deletes: [{ table: 'events', id: cmd.id }] };
 }
 
-/** Whether a drop of the Event onto the day is allowed: it exists and is on another day. */
+/**
+ * Whether a drop of the Event onto the day is allowed: it exists and is on another day, and every Task or Sub-task
+ * placed in it can come along (a Task Occurrence is never put on or past the day of its next Occurrence: the drag limit).
+ * The Event itself has no limit.
+ */
 export function canMoveEvent(state: State, id: string, date: DateStr): boolean {
   const event = findEvent(state, id);
-  return !!event && event.date !== date;
+  if (!event || event.date === date) return false;
+  return state.tasks.filter((t) => t.event_id === id && !t.deleted_at).every((t) => withinDragLimit(state, t, date));
+}
+
+/** The move a drop makes, if it is allowed. */
+export function moveEvent(state: State, id: string, date: DateStr, now: Now): Changes {
+  return canMoveEvent(state, id, date) ? setEventDay(state, id, date, now) : noChanges();
 }
 
 /**
  * The Event takes the new day and its placed Tasks come along: they keep their Placement and, like any placed
  * Task, take the Event's day. A placed Sub-task has no day of its own, so it stays as it is.
+ * Without the drag limit: for "Repeat…" and the rebuild of a schedule, which put an Event on the day its rule falls on.
  */
-export function moveEvent(state: State, id: string, date: DateStr, now: Now): Changes {
-  if (!canMoveEvent(state, id, date)) return noChanges();
+export function setEventDay(state: State, id: string, date: DateStr, now: Now): Changes {
+  const event = findEvent(state, id);
+  if (!event || event.date === date) return noChanges();
   const tasks = state.tasks
     .filter((t) => t.event_id === id && !t.deleted_at && !t.parent_id && t.date !== date)
     .map((t) => ({ table: 'tasks' as const, id: t.id, set: { date, updated_at: now } }));

@@ -1,7 +1,10 @@
-import type { RecurrenceRule } from '@dayplanner/core';
+import { checkRecurrence, type RecurrenceRule } from '@dayplanner/core';
 import { useState } from 'react';
 
-/** The small picker behind "Repeat…" (spec assumption A5): one of the three rules. It only gathers input; the core validates. */
+/**
+ * The small picker behind "Repeat…" (spec assumption A5): one of the three rules. It only gathers input and builds the
+ * rule from it; whether the rule is valid, and what to tell the user when it is not, is the core's `checkRecurrence`.
+ */
 
 type Kind = 'days' | 'weekdays' | 'month';
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -16,18 +19,15 @@ export function RepeatPicker({ onApply, applyLabel = 'Start repeating' }: { onAp
 
   const apply = () => {
     const n = Number(kind === 'days' ? days : kind === 'weekdays' ? weeks : dom);
-    if (kind === 'weekdays' && picked.length === 0) return setError('Pick at least one weekday.');
-    if (!Number.isInteger(n) || n < 1 || (kind === 'month' && n > 31)) {
-      return setError(kind === 'month' ? 'Pick a day from 1 to 31.' : 'Use a whole number from 1.');
-    }
-    setError(null);
-    onApply(
+    const rule: RecurrenceRule =
       kind === 'days'
         ? { rule: 'every_n_days', interval: n }
         : kind === 'weekdays'
           ? { rule: 'weekdays', weekdays: picked, everyWeeks: n }
-          : { rule: 'day_of_month', day: n },
-    );
+          : { rule: 'day_of_month', day: n };
+    const problem = checkRecurrence(rule);
+    setError(problem);
+    if (!problem) onApply(rule);
   };
 
   return (

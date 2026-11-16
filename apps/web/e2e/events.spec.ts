@@ -114,3 +114,22 @@ test('the tap menu renames and retimes an Event, so it moves between Next and No
   await expect(menu).toBeHidden();
   await expect(page.getByTestId('now')).toContainText('Free');
 });
+
+test('every Event card has a "+ Task in …" field: Later today and Earlier today too, not only Now and Next', async ({ page }) => {
+  await addEvent(page, 'Gym 18-19');
+  await addEvent(page, 'Dinner 20:30-21:15');
+  await addEvent(page, 'Standup 8-9:15');
+
+  // Gym is Next, so Dinner is the one in Later today
+  const field = page.getByPlaceholder('+ Task in Dinner');
+  await field.fill('Book a table');
+  await field.press('Enter');
+  await expect(page.getByTestId('tab-panel')).toContainText('Book a table');
+  await expect(page.getByTestId('anytime-count')).toHaveText('0'); // placed, so not in Anytime
+
+  await page.getByRole('tab', { name: /Earlier today/ }).click();
+  const earlier = page.getByPlaceholder('+ Task in Standup');
+  await earlier.fill('Write notes');
+  await earlier.press('Enter');
+  await expect(page.getByTestId('tab-panel')).toContainText('Write notes');
+});

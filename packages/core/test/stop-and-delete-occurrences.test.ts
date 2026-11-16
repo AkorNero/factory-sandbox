@@ -3,8 +3,11 @@ import { apply, applyChanges, dayView, type State } from '../src/index.ts';
 import { MON_10_15, aTask } from './helpers.ts';
 import { NOTHING, dailyEvent, dailyTask, handMoved, idOn, lineageOf, run } from './series-fixtures.ts';
 
-const taskDates = (state: State) => state.tasks.filter((t) => !t.parent_id).map((t) => t.occurrence_date ?? `one-off ${t.date}`).sort();
+const taskDates = (state: State) => state.tasks.filter((t) => !t.parent_id && !t.deleted_at).map((t) => t.occurrence_date ?? `one-off ${t.date}`).sort();
 const gym = (d: string) => idOn('gym', d);
+const live = <T extends { deleted_at: string | null }>(rows: T[]) => rows.filter((r) => !r.deleted_at);
+const liveEventDates = (state: State) => state.events.filter((e) => !e.deleted_at).map((e) => e.date).sort();
+const liveSubParents = (state: State) => state.tasks.filter((t) => t.parent_id && !t.deleted_at).map((t) => t.parent_id).sort();
 
 describe('Stop repeating', () => {
   it('keeps the opened Occurrence as a plain one-off and removes the later ones', () => {
@@ -19,7 +22,7 @@ describe('Stop repeating', () => {
     const after = run(dailyTask(), { type: 'stopRepeating', id: idOn('daily', '2026-11-18') });
 
     expect(lineageOf(after, 'daily')).toEqual([expect.objectContaining({ starts_on: '2026-11-16', ends_on: '2026-11-17' })]);
-    expect(run(after, { type: 'materialise', dates: ['2026-11-19', '2026-11-25'] }).tasks).toHaveLength(3);
+    expect(live(run(after, { type: 'materialise', dates: ['2026-11-19', '2026-11-25'] }).tasks)).toHaveLength(3);
     expect(after.tasks.find((t) => t.id === idOn('daily', '2026-11-17'))).toMatchObject({ series_id: 'daily', occurrence_date: '2026-11-17' });
   });
 
@@ -28,7 +31,7 @@ describe('Stop repeating', () => {
     state = run(state, { type: 'stopRepeating', id: idOn('daily', '2026-11-17') });
 
     expect(lineageOf(state, 'daily').every((s) => s.ends_on !== null && s.ends_on < '2026-11-17')).toBe(true);
-    expect(run(state, { type: 'materialise', dates: ['2026-11-21', '2026-11-30'] }).tasks.filter((t) => !t.parent_id)).toHaveLength(2);
+    expect(live(run(state, { type: 'materialise', dates: ['2026-11-21', '2026-11-30'] }).tasks).filter((t) => !t.parent_id)).toHaveLength(2);
   });
 
   it('keeps done Occurrences and their link, removes the open later ones, and takes the Sub-tasks of the opened one along as plain ones', () => {
@@ -51,7 +54,7 @@ describe('Stop repeating', () => {
 
     const after = run(state, { type: 'stopRepeating', id: gym('2026-11-17') });
 
-    expect(after.events.map((e) => e.date).sort()).toEqual(['2026-11-16', '2026-11-17']);
+    expect(liveEventDates(after)).toEqual(['2026-11-16', '2026-11-17']);
     expect(after.events.find((e) => e.id === gym('2026-11-17'))).toMatchObject({ series_id: null, occurrence_date: null });
     expect(after.tasks.find((t) => t.id === 'bag')).toMatchObject({ event_id: null, date: '2026-11-19' });
   });
@@ -106,7 +109,7 @@ describe('Delete an Occurrence', () => {
 
     expect(taskDates(after)).toEqual(['2026-11-16', '2026-11-17']);
     expect(lineageOf(after, 'daily')).toEqual([expect.objectContaining({ ends_on: '2026-11-17' })]);
-    expect(run(after, { type: 'materialise', dates: ['2026-11-18', '2026-11-30'] }).tasks).toHaveLength(2);
+    expect(live(run(after, { type: 'materialise', dates: ['2026-11-18', '2026-11-30'] }).tasks)).toHaveLength(2);
   });
 
   it('"This and following" keeps earlier, done and Skipped Occurrences, and removes the Sub-tasks of removed ones', () => {
@@ -117,9 +120,7 @@ describe('Delete an Occurrence', () => {
     const after = run(state, { type: 'deleteTask', id: idOn('daily', '2026-11-17'), scope: 'following' });
 
     expect(taskDates(after)).toEqual(['2026-11-16', '2026-11-19', '2026-11-20']);
-    expect(after.tasks.filter((t) => t.parent_id).map((t) => t.parent_id).sort()).toEqual(
-      [idOn('daily', '2026-11-16'), idOn('daily', '2026-11-19'), idOn('daily', '2026-11-20')].sort(),
-    );
+    expect(liveSubParents(after)).toEqual([idOn('daily', '2026-11-16'), idOn('daily', '2026-11-19'), idOn('daily', '2026-11-20')].sort());
   });
 
   it('"This and following" on an Event removes it and later ones and unplaces their items on their days', () => {
@@ -134,10 +135,10 @@ describe('Delete an Occurrence', () => {
 
     const after = run(state, { type: 'deleteEvent', id: gym('2026-11-18'), scope: 'following' });
 
-    expect(after.events.map((e) => e.date).sort()).toEqual(['2026-11-16', '2026-11-17']);
+    expect(liveEventDates(after)).toEqual(['2026-11-16', '2026-11-17']);
     expect(after.tasks.find((t) => t.id === 'a')).toMatchObject({ event_id: null, date: '2026-11-18' });
     expect(after.tasks.find((t) => t.id === 'b')).toMatchObject({ event_id: gym('2026-11-16') });
-    expect(run(after, { type: 'materialise', dates: ['2026-11-18', '2026-11-19'] }).events).toHaveLength(2);
+    expect(live(run(after, { type: 'materialise', dates: ['2026-11-18', '2026-11-19'] }).events)).toHaveLength(2);
   });
 });
 
@@ -174,5 +175,71 @@ describe('A moved Occurrence', () => {
     expect(run(after, { type: 'materialise', dates: ['2026-11-18'] }).events).toHaveLength(5);
     const view = dayView(after, '2026-11-22', MON_10_15);
     expect(view.later.events[0]).toMatchObject({ recurrence: 'daily', placedTotal: 1 });
+  });
+});
+
+describe('Removed Occurrences are soft-deleted, never hard-deleted', () => {
+  // a stale device can only be stopped from making a row again under its deterministic id if the row still exists
+  const staleSeries = (after: State, before: State): State => ({ ...after, series: before.series });
+  const withSubtasks = () => dailyTask({ template: { title: 'Clean', subtasks: [{ key: 'k', title: 'Hoover' }] } });
+
+  it('Stop repeating marks the later Occurrences and their Sub-tasks deleted and removes no row', () => {
+    const state = withSubtasks();
+    const changes = apply(state, { type: 'stopRepeating', id: idOn('daily', '2026-11-18') }, MON_10_15);
+    const after = applyChanges(state, changes);
+
+    expect(changes.deletes).toEqual([]);
+    for (const d of ['2026-11-19', '2026-11-20']) {
+      expect(after.tasks.find((t) => t.id === idOn('daily', d))?.deleted_at, d).toBe(MON_10_15);
+      expect(after.tasks.find((t) => t.parent_id === idOn('daily', d))?.deleted_at, d).toBe(MON_10_15);
+    }
+    expect(after.tasks.find((t) => t.id === idOn('daily', '2026-11-18'))?.deleted_at).toBeNull();
+  });
+
+  it('"This and following" on a Task marks this and later Occurrences deleted and removes no row', () => {
+    const state = withSubtasks();
+    const changes = apply(state, { type: 'deleteTask', id: idOn('daily', '2026-11-18'), scope: 'following' }, MON_10_15);
+    const after = applyChanges(state, changes);
+
+    expect(changes.deletes).toEqual([]);
+    expect(after.tasks.filter((t) => t.deleted_at).map((t) => t.id).sort()).toHaveLength(6); // 3 Occurrences and their 3 Sub-tasks
+    expect(after.tasks).toHaveLength(state.tasks.length);
+  });
+
+  it('"This and following" on an Event marks this and later Occurrences deleted and removes no row', () => {
+    const state = dailyEvent();
+    const changes = apply(state, { type: 'deleteEvent', id: gym('2026-11-18'), scope: 'following' }, MON_10_15);
+    const after = applyChanges(state, changes);
+
+    expect(changes.deletes).toEqual([]);
+    expect(after.events.filter((e) => e.deleted_at).map((e) => e.id).sort()).toEqual([gym('2026-11-18'), gym('2026-11-19'), gym('2026-11-20')].sort());
+  });
+
+  it('a device that has not seen the series end cannot make a removed Occurrence again', () => {
+    const state = withSubtasks();
+    for (const cmd of [
+      { type: 'stopRepeating', id: idOn('daily', '2026-11-18') },
+      { type: 'deleteTask', id: idOn('daily', '2026-11-18'), scope: 'following' },
+    ] as const) {
+      const after = run(state, cmd);
+
+      const stale = run(staleSeries(after, state), { type: 'materialise', dates: ['2026-11-18', '2026-11-19', '2026-11-20'] });
+
+      expect(stale.tasks.length, cmd.type).toBe(after.tasks.length);
+    }
+  });
+
+  it('a removed Event Occurrence cannot be made again by a stale device either, and its items are unplaced', () => {
+    const state = applyChanges(dailyEvent(), {
+      inserts: [{ table: 'tasks', row: aTask({ id: 'a', date: '2026-11-19', event_id: gym('2026-11-19') }) }],
+      updates: [],
+      deletes: [],
+    });
+    const after = run(state, { type: 'stopRepeating', id: gym('2026-11-17') });
+
+    const stale = run(staleSeries(after, state), { type: 'materialise', dates: ['2026-11-19'] });
+
+    expect(stale.events).toHaveLength(after.events.length);
+    expect(after.tasks.find((t) => t.id === 'a')).toMatchObject({ event_id: null, date: '2026-11-19' });
   });
 });

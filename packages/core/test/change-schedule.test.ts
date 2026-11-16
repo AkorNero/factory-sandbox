@@ -20,6 +20,20 @@ describe('Change schedule on a Task Occurrence', () => {
     expect(taskTitles(rebuilt)['2026-11-19']).toBeUndefined();
   });
 
+  it('soft-deletes the removed Occurrences (no hard delete), and the new rule can still make an Occurrence on a day they held', () => {
+    const state = dailyTask();
+    const changes = apply(state, { type: 'changeSchedule', id: idOn('daily', '2026-11-17'), seriesId: 'every2', recurrence: { rule: 'every_n_days', interval: 2 } }, MON_10_15);
+    const after = applyChanges(state, changes);
+
+    expect(changes.deletes).toEqual([]);
+    expect(after.tasks.filter((t) => t.deleted_at).map((t) => t.id).sort()).toEqual(
+      ['2026-11-18', '2026-11-19', '2026-11-20'].map((d) => idOn('daily', d)).sort(),
+    );
+    // the removed rows no longer claim their days: every 2 days from Tue 17th lands on the 19th, which the old series had made
+    const rebuilt = run(after, { type: 'materialise', dates: ['2026-11-18', '2026-11-19', '2026-11-20', '2026-11-21'] });
+    expect(dates(rebuilt)).toEqual(['2026-11-16', '2026-11-17', '2026-11-19', '2026-11-21']);
+  });
+
   it('keeps the opened Occurrence, moved to the first matching day, unplaced, and linked to the new segment', () => {
     const state = applyChanges(dailyTask(), {
       inserts: [{ table: 'events', row: anEvent({ id: 'work', date: '2026-11-17' }) }],
@@ -77,7 +91,7 @@ describe('Change schedule on a Task Occurrence', () => {
 
     const after = run(state, { type: 'changeSchedule', id: idOn('daily', '2026-11-17'), seriesId: 'mw', recurrence: weekdaysMonWed });
 
-    expect(after.tasks.filter((t) => t.parent_id).map((t) => t.parent_id).sort()).toEqual([idOn('daily', '2026-11-16'), idOn('daily', '2026-11-17')].sort());
+    expect(after.tasks.filter((t) => t.parent_id && !t.deleted_at).map((t) => t.parent_id).sort()).toEqual([idOn('daily', '2026-11-16'), idOn('daily', '2026-11-17')].sort());
   });
 
   it('refuses a bad rule, a taken id, a Sub-task, and an Occurrence that is done or not repeating', () => {
@@ -123,7 +137,7 @@ describe('Change schedule on an Event Occurrence', () => {
     expect(after.tasks.find((t) => t.id === 'bag')).toMatchObject({ event_id: null, date: '2026-11-18' });
     expect(after.tasks.find((t) => t.id === 'towel')).toMatchObject({ event_id: null, date: '2026-11-19' });
     expect(dayView(after, '2026-11-19', MON_10_15).anytime.items.map((i) => i.title)).toEqual(['A task']);
-    expect(after.events.map((e) => e.date).sort()).toEqual(['2026-11-16', '2026-11-18']);
+    expect(after.events.filter((e) => !e.deleted_at).map((e) => e.date).sort()).toEqual(['2026-11-16', '2026-11-18']);
   });
 
   it('keeps the opened Event with its placed items, moving it (and them) to the first matching day', () => {
@@ -146,6 +160,6 @@ describe('Change schedule on an Event Occurrence', () => {
 
     const after = run(state, { type: 'changeSchedule', id: gym('2026-11-17'), seriesId: 'mw', recurrence: weekdaysMonWed });
 
-    expect(after.events.map((e) => e.date).sort()).toEqual(['2026-11-16', '2026-11-18']);
+    expect(after.events.filter((e) => !e.deleted_at).map((e) => e.date).sort()).toEqual(['2026-11-16', '2026-11-18']);
   });
 });

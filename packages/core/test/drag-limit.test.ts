@@ -85,6 +85,36 @@ describe('the drag limit on a Task Occurrence', () => {
   });
 });
 
+describe('moving an Event holds the Task Occurrences placed in it to the drag limit', () => {
+  const placed = (extra: Partial<State> = {}) =>
+    state({ events: [anEvent({ id: 'work', date: '2026-11-16' })], tasks: [{ ...occurrence(), event_id: 'work' }], ...extra });
+
+  it('allows the move to any day before the placed Occurrence\'s next one, and the Task comes along', () => {
+    expect([canMoveEvent(placed(), 'work', '2026-11-17'), canMoveEvent(placed(), 'work', '2026-11-22')]).toEqual([true, true]);
+    expect(applyChanges(placed(), apply(placed(), { type: 'moveEvent', id: 'work', date: '2026-11-22' }, MON_10_15)).tasks[0]).toMatchObject({ date: '2026-11-22', event_id: 'work' });
+  });
+
+  it('refuses the move onto or past the day of the next Occurrence, and changes nothing', () => {
+    for (const day of ['2026-11-23', '2026-11-24', '2027-03-01']) {
+      expect(canMoveEvent(placed(), 'work', day), day).toBe(false);
+      expect(apply(placed(), { type: 'moveEvent', id: 'work', date: day }, MON_10_15), day).toEqual(NOTHING);
+    }
+  });
+
+  it("holds a placed Sub-task of an Occurrence to its parent's limit", () => {
+    const sub = aTask({ id: 'sub', parent_id: 'occ', title: 'Soak racks', date: null, event_id: 'work' });
+    const s = state({ events: [anEvent({ id: 'work', date: '2026-11-16' })], tasks: [occurrence(), sub] });
+
+    expect([canMoveEvent(s, 'work', '2026-11-22'), canMoveEvent(s, 'work', '2026-11-23')]).toEqual([true, false]);
+  });
+
+  it('does not hold back an Event with only one-off Tasks placed, or none', () => {
+    const s = state({ events: [anEvent({ id: 'work', date: '2026-11-16' })], tasks: [aTask({ id: 'one', event_id: 'work' })] });
+
+    expect(canMoveEvent(s, 'work', '2027-03-01')).toBe(true);
+  });
+});
+
 describe('Event Occurrences have no limit', () => {
   it('can be dragged onto or past the day of their next Occurrence', () => {
     const series = aSeries({ id: 'gym', kind: 'event', rule: 'weekdays', weekdays: '[1]', anchor_date: '2026-11-16', starts_on: '2026-11-16', template: JSON.stringify({ title: 'Gym', start: '18:00', end: '19:00' }) });

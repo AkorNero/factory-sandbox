@@ -17,6 +17,7 @@ COPY apps/web/package.json apps/web/package.json
 COPY apps/api/package.json apps/api/package.json
 RUN npm ci --omit=dev -w apps/api
 COPY apps/api/src apps/api/src
+COPY apps/api/migrations apps/api/migrations
 COPY --from=web /repo/apps/web/dist /app/web
 # Node strips the TypeScript types itself (22.18+), so there is no API build step.
 CMD ["node", "apps/api/src/server.ts"]

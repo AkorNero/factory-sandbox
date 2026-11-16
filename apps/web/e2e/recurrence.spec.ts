@@ -44,6 +44,27 @@ test('"Repeat…" on a Task makes Occurrences on later days, marked ↻, that ti
   await expect(page.getByTestId('anytime-count')).toHaveText('1');
 });
 
+test('the "Repeat…" picker shows the core\'s reason for a rule it refuses, and starts nothing', async ({ page }) => {
+  await page.goto('/?db=rec-refused');
+  await type(page, '+ Task today', 'Water plants');
+  await page.getByRole('button', { name: 'Water plants', exact: true }).click();
+  await page.getByRole('button', { name: 'Repeat…' }).click();
+
+  await page.getByLabel('Every (days)').fill('1000');
+  await page.getByRole('button', { name: 'Start repeating' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Use a whole number of days from 1 to 999.');
+
+  await page.getByLabel('Repeat rule').selectOption('weekdays');
+  await page.getByRole('button', { name: 'Start repeating' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Pick at least one weekday.');
+
+  await page.getByLabel('Repeat rule').selectOption('month');
+  await page.getByLabel('Day of the month').fill('32');
+  await page.getByRole('button', { name: 'Start repeating' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Pick a day from 1 to 31.');
+  await expect(page.getByRole('dialog', { name: 'Edit task' })).toBeVisible(); // nothing was applied, the menu stays open
+});
+
 test('"Repeat…" on an Event: weekdays; later Occurrences start with nothing placed in them', async ({ page }) => {
   await page.goto('/?db=rec-event');
   await type(page, '+ Event, e.g. Gym 18-19', 'Gym 18-19');
@@ -60,13 +81,13 @@ test('"Repeat…" on an Event: weekdays; later Occurrences start with nothing pl
   await expect(page.getByTestId('next')).toContainText('Pack bag');
 
   await chip(page, /Tuesday 17 November/).click();
-  const events = page.getByTestId('day-events');
+  const events = page.getByTestId('tab-panel');
   await expect(events).toContainText('Gym');
   await expect(events).toContainText('↻ Mon/Tue');
   await expect(events).not.toContainText('Pack bag');
   // no Occurrence on Wednesday
   await chip(page, /Wednesday 18 November/).click();
-  await expect(page.getByTestId('events-count')).toHaveText('0');
+  await expect(page.getByRole('tab', { name: /^Events/ })).toHaveText(/0$/);
 });
 
 test('"Repeat…" on a Someday Task puts its first Occurrence on the first matching day and out of Someday', async ({ page }) => {

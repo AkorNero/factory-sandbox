@@ -15,7 +15,7 @@ import { RepeatSection } from './Repeat.tsx';
 import { ScopePrompt, useScopeAsk } from './Scope.tsx';
 import './events.css';
 
-/** The Events part of Today: Now, Next, and the Later today / Earlier today tabs. No rules in here. */
+/** The Events part of a day: Now and Next (today only), and the Later / Earlier / Someday tabs (every day). No rules in here. */
 
 export type Open = (eventId: string) => void;
 
@@ -132,8 +132,8 @@ export function DayTabs({
   const { open } = actions;
   const [tab, setTab] = useState<Tab>('later');
   const tabs: [Tab, string, number][] = [
-    ['later', 'Later today', view.later.count],
-    ['earlier', 'Earlier today', view.earlier.count],
+    ['later', view.isToday ? 'Later today' : 'Events', view.later.count],
+    ['earlier', view.isToday ? 'Earlier today' : 'Earlier', view.earlier.count],
     ['someday', 'Someday', view.someday.count],
   ];
   return (
@@ -171,7 +171,7 @@ export function DayTabs({
                 right={e.startsInMinutes === null ? null : <span className="rel">in {formatDuration(e.startsInMinutes)}</span>}
               />
             ))}
-            {view.later.count === 0 && <p className="mute">Nothing else later today.</p>}
+            {view.later.count === 0 && <p className="mute">{view.isToday ? 'Nothing else later today.' : 'No Events on this day.'}</p>}
             <AddEvent onAdd={onAdd} />
           </>
         ) : (
@@ -186,35 +186,9 @@ export function DayTabs({
                 right={<Outcome card={e} />}
               />
             ))}
-            {view.earlier.count === 0 && <p className="mute">Nothing has finished yet.</p>}
+            {view.earlier.count === 0 && <p className="mute">{view.isToday ? 'Nothing has finished yet.' : 'Nothing earlier on this day.'}</p>}
           </>
         )}
-      </div>
-    </section>
-  );
-}
-
-/** A day other than today, opened from the strip: its Events (each with its placed Tasks) and a field to add one. */
-export function DayEvents({
-  view,
-  actions,
-  onAdd,
-}: {
-  view: DayView;
-  actions: EventActions;
-  onAdd: (title: string, start: string, end: string) => Promise<unknown>;
-}) {
-  return (
-    <section aria-labelledby="events-h">
-      <h2 id="events-h" className="sec">
-        Events <span className="count" data-testid="events-count">{view.later.count}</span>
-      </h2>
-      <div className="panel" data-testid="day-events">
-        {view.later.events.map((e) => (
-          <Row key={e.id} card={e} actions={actions} sub={range(e)} right={null} addTask />
-        ))}
-        {view.later.count === 0 && <p className="mute">No Events on this day.</p>}
-        <AddEvent onAdd={onAdd} />
       </div>
     </section>
   );
@@ -238,15 +212,12 @@ function Row({
   sub,
   right,
   past,
-  addTask,
 }: {
   card: EventCard;
   actions: EventActions;
   sub: string;
   right: ReactNode;
   past?: boolean;
-  /** Show the "+ Task in <Event>" field (the Events of a day opened from the strip). */
-  addTask?: boolean;
 }) {
   const drag = useDrag().dragProps({ kind: 'event', id: card.id, label: card.title });
   return (
@@ -259,7 +230,7 @@ function Row({
         {right}
       </div>
       <TaskRows items={card.tasks} {...actions} />
-      {addTask && <AddInEvent card={card} actions={actions} />}
+      <AddInEvent card={card} actions={actions} />
     </div>
   );
 }

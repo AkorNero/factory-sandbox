@@ -8,5 +8,5 @@ export { SCHEMA, type ColumnType } from './schema.ts';
 export { checkEventTimes, parseEventInput, type ParsedEvent } from './event-input.ts';
 export { occurrenceDates, recurrenceLabel, weekdaysOf } from './recurrence.ts';
 export { occurrenceId, occurrenceSubtaskId, splitSeriesId } from './ids.ts';
-export { canRepeat, materialise } from './series.ts';
+export { canRepeat, checkRecurrence, materialise } from './series.ts';
 export { asksScope, canEditSchedule } from './series-edit.ts';
