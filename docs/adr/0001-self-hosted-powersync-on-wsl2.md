@@ -1,6 +1,6 @@
 # Self-hosted PowerSync + Postgres on WSL2, private over Tailscale
 
-Day Planner syncs through PowerSync, using SQLite in the browser on each device and Postgres as the source of truth. The server runs on the user's own Windows PC under WSL2, as one `docker compose` project started by systemd: Postgres (logical replication, with a separate database for PowerSync bucket storage), PowerSync Open Edition, and a small Node API. The Node API holds the `uploadData` endpoint, issues a long-lived JWT per device, serves the JWKS, and serves the static PWA. Tailscale inside WSL exposes everything through `tailscale serve` on one `https://<host>.ts.net` hostname. It is reachable only on the tailnet, with Funnel off, and there is no login screen. Writes apply per column, and the last write to arrive wins. We chose this because it gives a true local database, real SQL and no vendor lock-in, and owning the sync code was judged acceptable. Self-hosting avoids the 1-week idle pause on both the PowerSync Cloud and Supabase free tiers, and it drops Supabase entirely.
+Day Planner syncs through PowerSync, using SQLite in the browser on each device and Postgres as the source of truth. The server runs on the user's own Windows PC under WSL2, as one `docker compose` project run by Docker Desktop (WSL integration), with `restart: unless-stopped` on every service so it comes back when Docker Desktop starts at login: Postgres (logical replication, with a separate database for PowerSync bucket storage), PowerSync Open Edition, and a small Node API. The Node API holds the `uploadData` endpoint, issues a long-lived JWT per device, serves the JWKS, and serves the static PWA. Tailscale inside WSL exposes everything through `tailscale serve` on one `https://<host>.ts.net` hostname, forwarding to the Node API on `127.0.0.1:8080`. It is reachable only on the tailnet, with Funnel off, and there is no login screen. Writes apply per column, and the last write to arrive wins. We chose this because it gives a true local database, real SQL and no vendor lock-in, and owning the sync code was judged acceptable. Self-hosting avoids the 1-week idle pause on both the PowerSync Cloud and Supabase free tiers, and it drops Supabase entirely.
 
 ## Considered Options
 
@@ -11,7 +11,7 @@ Day Planner syncs through PowerSync, using SQLite in the browser on each device 
 
 ## Consequences
 
-- Sync only happens while the PC is on and WSL is kept running. Offline edits queue on each device until then.
+- Sync only happens while the PC is on, the user is logged in to Windows (Docker Desktop starts at sign-in), and WSL is kept running (`.wslconfig` disables idle shutdown; a logon task starts Ubuntu). Offline edits queue on each device until then.
 - **No backups (accepted risk).** The Postgres volume on one disk is the only durable copy. iOS may evict the phone's local data, so a disk failure could lose everything not still cached in a browser.
 - Security rests on tailnet membership. Enabling Funnel or any public exposure requires adding real auth first.
 - Reminders (Web Push) are out of the MVP and played no part in this choice.
