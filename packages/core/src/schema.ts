@@ -1,7 +1,7 @@
 /**
  * Column lists of the four synced tables, as the client's PowerSync schema sees them
  * (powersync columns are text / integer / real; the id column is implicit).
- * The Postgres DDL in infra/postgres/init/02-schema.sql must list the same columns:
+ * The Postgres tables, as the migrations in apps/api/migrations leave them, must list the same columns:
  * an API test compares the two.
  */
 export type ColumnType = 'text' | 'integer' | 'real';

@@ -1,11 +1,15 @@
 import type pg from 'pg';
 
+/** The tables the API keeps for itself. They are never reachable through an upload. */
+const INTERNAL_TABLES = ['schema_migrations', 'deleted_rows'];
+
 /** What the upload endpoint knows about the tables: names and Postgres types, read from the DDL itself. */
 export type Catalog = Map<string, Map<string, string>>;
 
 export async function loadCatalog(pool: pg.Pool): Promise<Catalog> {
   const { rows } = await pool.query<{ table_name: string; column_name: string; udt_name: string }>(
-    `SELECT table_name, column_name, udt_name FROM information_schema.columns WHERE table_schema = 'public'`,
+    `SELECT table_name, column_name, udt_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name <> ALL($1)`,
+    [INTERNAL_TABLES],
   );
   const catalog: Catalog = new Map();
   for (const r of rows) {

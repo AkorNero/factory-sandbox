@@ -162,6 +162,12 @@ describe('the upload endpoint', () => {
       expect(await task('t1')).toBeUndefined();
     });
 
+    it('rejects the internal schema_migrations table: only the four synced tables take uploads', async () => {
+      const res = await upload(app, [{ op: 'PUT', table: 'schema_migrations', id: 'x', data: { applied_at: '2026-01-01' } }]);
+
+      expect(res.statusCode).toBe(400);
+    });
+
     it('rejects an unknown column with 400', async () => {
       const res = await upload(app, [{ op: 'PATCH', table: 'tasks', id: 't1', data: { 'title = 1; --': 'x' } }]);
 

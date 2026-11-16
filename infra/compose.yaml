@@ -1,5 +1,11 @@
 name: dayplanner
 
+# One image for the api and the migrate job.
+x-api-build: &api-build
+  build:
+    context: ..
+    dockerfile: apps/api/Dockerfile
+
 services:
   postgres:
     image: postgres:17
@@ -14,7 +20,7 @@ services:
       API_DB_PASSWORD: ${API_DB_PASSWORD}
     volumes:
       - pg_data:/var/lib/postgresql/data
-      # Run only on an empty volume.
+      # Roles and the publication, made once on an empty volume. The tables come from the migrate service below.
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d dayplanner"]
@@ -43,13 +49,23 @@ services:
       retries: 20
     # No published ports: reached only as http://powersync:8080 from the api container.
 
+  # Brings the schema up to date on every `up`: a fresh volume gets all of it, an older one only what it lacks.
+  # It runs as the database owner (the api's own role cannot change tables) and exits; the api waits for it.
+  migrate:
+    <<: *api-build
+    restart: "no"
+    command: ["node", "apps/api/src/migrate.ts"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgresql://postgres:${PG_SUPER_PASSWORD}@postgres:5432/dayplanner
+
   api:
-    build:
-      context: ..
-      dockerfile: apps/api/Dockerfile
+    <<: *api-build
     restart: unless-stopped
     depends_on:
       postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
     environment:
       DATABASE_URL: postgresql://api_user:${API_DB_PASSWORD}@postgres:5432/dayplanner
       POWERSYNC_UPSTREAM: http://powersync:8080

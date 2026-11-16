@@ -1,6 +1,7 @@
 #!/bin/sh
 # Roles, the bucket-storage database and the logical-replication publication.
-# Runs once, on an empty volume, before 02-schema.sql. Passwords come from the compose environment.
+# Runs once, on an empty volume. The tables are not made here: the migrations in apps/api/migrations make them
+# (the compose project's `migrate` service runs them as postgres on every `up`). Passwords come from the compose environment.
 set -eu
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres \
@@ -16,7 +17,7 @@ CREATE ROLE powersync_role WITH REPLICATION BYPASSRLS LOGIN PASSWORD :'repl_pw';
 CREATE ROLE api_user WITH LOGIN PASSWORD :'api_pw';
 
 \connect dayplanner
--- 02-schema.sql creates the tables as postgres afterwards, so default privileges cover them.
+-- The migrations create the tables as postgres afterwards, so default privileges cover them.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO powersync_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO api_user;
 GRANT USAGE ON SCHEMA public TO powersync_role, api_user;
