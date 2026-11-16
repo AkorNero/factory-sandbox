@@ -7,7 +7,7 @@ import {
   type NowCard,
 } from '@dayplanner/core';
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { eventDrop, somedayDrop } from './drag.tsx';
+import { eventDrop, somedayDrop, useDrag } from './drag.tsx';
 import { AddField, TaskRows, type ItemActions } from './Items.tsx';
 import './events.css';
 
@@ -38,6 +38,7 @@ function EventButton({ card, open, className }: { card: { id: string; title: str
 
 export function NowAndNext({ view, actions }: { view: DayView; actions: EventActions }) {
   const { open } = actions;
+  const drag = useDrag();
   const { cards } = view.now;
   const [lead, ...others] = cards;
   return (
@@ -65,7 +66,7 @@ export function NowAndNext({ view, actions }: { view: DayView; actions: EventAct
             Next · {view.next.start} (in {formatDuration(view.next.startsInMinutes)})
           </div>
           {view.next.events.map((e) => (
-            <div key={e.id} className="next-ev" {...eventDrop(e.id)}>
+            <div key={e.id} className="next-ev" {...eventDrop(e.id)} {...drag.dragProps({ kind: 'event', id: e.id, label: e.title })}>
               <EventButton card={e} open={open} className="h3" />
               <span className="mute"> {range(e)}</span>
               <TaskRows items={e.tasks} {...actions} />
@@ -81,8 +82,9 @@ export function NowAndNext({ view, actions }: { view: DayView; actions: EventAct
 function NowCardView({ card, actions, lead }: { card: NowCard; actions: EventActions; lead: 'only' | 'lead' | 'also' }) {
   const { open } = actions;
   const percent = Math.round(card.progress * 100);
+  const drag = useDrag().dragProps({ kind: 'event', id: card.id, label: card.title });
   return (
-    <div className={`now-card ${lead === 'also' ? 'also' : ''}`} data-testid="now-card" {...eventDrop(card.id)}>
+    <div className={`now-card ${lead === 'also' ? 'also' : ''}`} data-testid="now-card" {...eventDrop(card.id)} {...drag}>
       <div className="ev-label">
         {lead === 'also' ? 'Also now' : 'Now'} · {range(card)} · {card.minutesLeft} min left
       </div>
@@ -175,6 +177,32 @@ export function DayTabs({
   );
 }
 
+/** A day other than today, opened from the strip: its Events (each with its placed Tasks) and a field to add one. */
+export function DayEvents({
+  view,
+  actions,
+  onAdd,
+}: {
+  view: DayView;
+  actions: EventActions;
+  onAdd: (title: string, start: string, end: string) => Promise<unknown>;
+}) {
+  return (
+    <section aria-labelledby="events-h">
+      <h2 id="events-h" className="sec">
+        Events <span className="count" data-testid="events-count">{view.later.count}</span>
+      </h2>
+      <div className="panel" data-testid="day-events">
+        {view.later.events.map((e) => (
+          <Row key={e.id} card={e} actions={actions} sub={range(e)} right={null} addTask />
+        ))}
+        {view.later.count === 0 && <p className="mute">No Events on this day.</p>}
+        <AddEvent onAdd={onAdd} />
+      </div>
+    </section>
+  );
+}
+
 /** How a finished Event went: "1/3 done" in orange with "slot missed", "3/3 done" in green, or how long ago it ended. */
 function Outcome({ card }: { card: EventCard }) {
   if (card.placedTotal === 0) {
@@ -193,15 +221,19 @@ function Row({
   sub,
   right,
   past,
+  addTask,
 }: {
   card: EventCard;
   actions: EventActions;
   sub: string;
   right: ReactNode;
   past?: boolean;
+  /** Show the "+ Task in <Event>" field (the Events of a day opened from the strip). */
+  addTask?: boolean;
 }) {
+  const drag = useDrag().dragProps({ kind: 'event', id: card.id, label: card.title });
   return (
-    <div className={`ev-row ${past ? 'past' : ''}`} {...eventDrop(card.id)}>
+    <div className={`ev-row ${past ? 'past' : ''}`} {...eventDrop(card.id)} {...drag}>
       <div className="ev-head">
         <div>
           <EventButton card={card} open={actions.open} />
@@ -210,6 +242,7 @@ function Row({
         {right}
       </div>
       <TaskRows items={card.tasks} {...actions} />
+      {addTask && <AddInEvent card={card} actions={actions} />}
     </div>
   );
 }

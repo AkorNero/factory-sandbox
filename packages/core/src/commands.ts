@@ -15,6 +15,8 @@ export function apply(state: State, command: Command, now: Now): Changes {
       return setEventTimes(state, command, now);
     case 'deleteEvent':
       return deleteEvent(state, command, now);
+    case 'moveEvent':
+      return moveEvent(state, command.id, command.date, now);
     case 'placeTask':
       return placeTask(state, command.id, command.eventId, now);
     case 'unplaceTask':
@@ -120,6 +122,24 @@ function deleteEvent(state: State, cmd: Extract<Command, { type: 'deleteEvent' }
   return { inserts: [], updates, deletes: [{ table: 'events', id: cmd.id }] };
 }
 
+/** Whether a drop of the Event onto the day is allowed: it exists and is on another day. */
+export function canMoveEvent(state: State, id: string, date: DateStr): boolean {
+  const event = findEvent(state, id);
+  return !!event && event.date !== date;
+}
+
+/**
+ * The Event takes the new day and its placed Tasks come along: they keep their Placement and, like any placed
+ * Task, take the Event's day. A placed Sub-task has no day of its own, so it stays as it is.
+ */
+function moveEvent(state: State, id: string, date: DateStr, now: Now): Changes {
+  if (!canMoveEvent(state, id, date)) return noChanges();
+  const tasks = state.tasks
+    .filter((t) => t.event_id === id && !t.deleted_at && !t.parent_id && t.date !== date)
+    .map((t) => ({ table: 'tasks' as const, id: t.id, set: { date, updated_at: now } }));
+  return { inserts: [], updates: [...updateEvent(id, { date }, now).updates, ...tasks], deletes: [] };
+}
+
 function liveTask(state: State, id: string): TaskRow | undefined {
   return state.tasks.find((t) => t.id === id && !t.deleted_at);
 }
@@ -172,11 +192,25 @@ function undateTask(state: State, id: string, now: Now): Changes {
   return updateTask(id, { date: null, ...(task.event_id ? { event_id: null } : {}), updated_at: now });
 }
 
-/** The Task takes the day and loses its Placement, so it is in Anytime on that day. */
-function dateTask(state: State, id: string, date: DateStr, now: Now): Changes {
+/**
+ * Whether the Task can be dated to the day: it exists, is not a Sub-task (a Sub-task follows its parent's day),
+ * and the change would do something: another day, or the same day but with a Placement to clear.
+ * A drop on a day chip or on Anytime asks this before offering the target.
+ */
+export function canDateTask(state: State, id: string, date: DateStr): boolean {
   const task = liveTask(state, id);
-  if (!task || task.parent_id || (task.date === date && !task.event_id)) return noChanges();
-  return updateTask(id, { date, ...(task.event_id ? { event_id: null } : {}), updated_at: now });
+  if (!task || task.parent_id) return false;
+  return task.date !== date || task.event_id !== null;
+}
+
+/** The Task takes the day and loses its Placement, so it is in Anytime on that day. Its Sub-tasks keep theirs. */
+function dateTask(state: State, id: string, date: DateStr, now: Now): Changes {
+  if (!canDateTask(state, id, date)) return noChanges();
+  const task = liveTask(state, id)!;
+  const set: Record<string, unknown> = {};
+  if (task.date !== date) set.date = date;
+  if (task.event_id !== null) set.event_id = null;
+  return updateTask(id, { ...set, updated_at: now });
 }
 
 /** Ticking records the Completion time. A Task that is already done keeps the time it has. */

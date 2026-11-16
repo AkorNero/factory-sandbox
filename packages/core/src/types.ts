@@ -121,13 +121,18 @@ export type Command =
   | { type: 'renameEvent'; id: string; title: string }
   | { type: 'setEventTimes'; id: string; start: TimeStr; end: TimeStr }
   | { type: 'deleteEvent'; id: string }
+  /** Move an Event to another day; the Tasks placed in it come along, still placed. */
+  | { type: 'moveEvent'; id: string; date: DateStr }
   /** Place a Task or Sub-task into an Event (a Task takes the Event's day). */
   | { type: 'placeTask'; id: string; eventId: string }
   /** Take it out of its Event, keeping its day. */
   | { type: 'unplaceTask'; id: string }
   /** Send a Task to Someday: it loses its date and its Placement. */
   | { type: 'undateTask'; id: string }
-  /** Give a Task a day ("Do today" is today's date); its Placement is cleared. A Sub-task has no day of its own. */
+  /**
+   * Give a Task a day ("Do today" is today's date, a drop on a day chip or on Anytime is the day shown); its
+   * Placement is cleared. A Sub-task has no day of its own.
+   */
   | { type: 'dateTask'; id: string; date: DateStr }
   | { type: 'tickTask'; id: string }
   | { type: 'untickTask'; id: string }
