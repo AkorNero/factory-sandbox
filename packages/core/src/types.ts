@@ -125,6 +125,8 @@ export type Command =
   | { type: 'placeTask'; id: string; eventId: string }
   /** Take it out of its Event, keeping its day. */
   | { type: 'unplaceTask'; id: string }
+  /** Date a Task to a day and clear its Placement (a drop on a day chip, or on Anytime of the day shown). */
+  | { type: 'dateTask'; id: string; date: DateStr }
   | { type: 'tickTask'; id: string }
   | { type: 'untickTask'; id: string }
   /** Edit a done Task's Completion time to `time` ('HH:MM') on the day it already has. */

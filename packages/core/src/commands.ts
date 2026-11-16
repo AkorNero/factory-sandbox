@@ -1,5 +1,5 @@
 import { checkEventTimes, normaliseTime } from './event-input.ts';
-import type { Changes, Command, EventRow, Now, State, TaskRow } from './types.ts';
+import type { Changes, Command, DateStr, EventRow, Now, State, TaskRow } from './types.ts';
 import { noChanges } from './types.ts';
 
 /** Run one command against the current state. Pure: returns the changed rows, never mutates `state`. */
@@ -19,6 +19,8 @@ export function apply(state: State, command: Command, now: Now): Changes {
       return placeTask(state, command.id, command.eventId, now);
     case 'unplaceTask':
       return unplaceTask(state, command.id, now);
+    case 'dateTask':
+      return dateTask(state, command.id, command.date, now);
     case 'tickTask':
       return tickTask(state, command.id, now);
     case 'untickTask':
@@ -149,6 +151,26 @@ function unplaceTask(state: State, id: string, now: Now): Changes {
   const task = liveTask(state, id);
   if (!task?.event_id) return noChanges();
   return updateTask(id, { event_id: null, updated_at: now });
+}
+
+/**
+ * Whether the Task can be dated to the day by a drop: it exists, is not a Sub-task (a Sub-task follows its
+ * parent's day), and the drop would change something: another day, or the same day but with a Placement to clear.
+ */
+export function canDateTask(state: State, id: string, date: DateStr): boolean {
+  const task = liveTask(state, id);
+  if (!task || task.parent_id) return false;
+  return task.date !== date || task.event_id !== null;
+}
+
+/** The Task gets the day and loses its Placement. Its Sub-tasks keep theirs. */
+function dateTask(state: State, id: string, date: DateStr, now: Now): Changes {
+  if (!canDateTask(state, id, date)) return noChanges();
+  const task = liveTask(state, id)!;
+  const set: Record<string, unknown> = {};
+  if (task.date !== date) set.date = date;
+  if (task.event_id !== null) set.event_id = null;
+  return updateTask(id, { ...set, updated_at: now });
 }
 
 /** Ticking records the Completion time. A Task that is already done keeps the time it has. */
