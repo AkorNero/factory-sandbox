@@ -209,24 +209,31 @@ function endSegments(l: Lineage, now: Now): Update[] {
     .map((s) => ({ table: 'series' as const, id: s.id, set: { ends_on: addDays(l.from, -1), updated_at: now } }));
 }
 
-/** Remove Task Occurrences for good, with their Sub-tasks. */
-const removeTasks = (state: State, rows: TaskRow[]): Changes => ({
+/**
+ * Remove Task Occurrences, with their Sub-tasks. They are marked deleted, never hard-deleted: the row stays under its
+ * deterministic id, so a device that has not seen the change cannot make the Occurrence again. The Occurrence also lets go
+ * of its day, so a rebuilt schedule can make an Occurrence there (a day belongs to the lineage while a row claims it).
+ */
+const removeTasks = (state: State, rows: TaskRow[], now: Now): Changes => ({
   inserts: [],
-  updates: [],
-  deletes: rows.flatMap((r) => [r, ...state.tasks.filter((t) => t.parent_id === r.id)]).map((t) => ({ table: 'tasks' as const, id: t.id })),
+  updates: rows.flatMap((r) => [
+    updateRow('tasks', r.id, { deleted_at: now, occurrence_date: null }, now),
+    ...state.tasks.filter((t) => t.parent_id === r.id && !t.deleted_at).map((t) => updateRow('tasks', t.id, { deleted_at: now }, now)),
+  ]),
+  deletes: [],
 });
 
-/** Remove Event Occurrences for good; the items placed in them become unplaced and keep their day. */
+/** Remove Event Occurrences (marked deleted, like Task ones); the items placed in them become unplaced and keep their day. */
 const removeEvents = (state: State, rows: EventRow[], now: Now): Changes => ({
   inserts: [],
-  updates: rows.flatMap((e) => unplaceItemsOf(state, e, now)),
-  deletes: rows.map((e) => ({ table: 'events' as const, id: e.id })),
+  updates: rows.flatMap((e) => [...unplaceItemsOf(state, e, now), updateRow('events', e.id, { deleted_at: now, occurrence_date: null }, now)]),
+  deletes: [],
 });
 
 /** Remove the later Occurrences of the lineage (history stays), not the opened one. */
 function removeLater(state: State, l: Lineage, occ: Occurrence, now: Now): Changes {
   return occ.kind === 'task'
-    ? removeTasks(state, laterThan(state, l, occ.row))
+    ? removeTasks(state, laterThan(state, l, occ.row), now)
     : removeEvents(state, laterEvents(state, l).filter((e) => e.id !== occ.row.id), now);
 }
 
@@ -296,6 +303,6 @@ export function stopRepeating(state: State, id: string, now: Now): Changes {
 /** "Delete" with "This and following": the opened Occurrence and every later one go, and the series ends before them. */
 function deleteFollowing(state: State, l: Lineage, occ: Occurrence, now: Now): Changes {
   const removal =
-    occ.kind === 'task' ? removeTasks(state, laterTasks(state, l, occ.row.id)) : removeEvents(state, laterEvents(state, l), now);
+    occ.kind === 'task' ? removeTasks(state, laterTasks(state, l, occ.row.id), now) : removeEvents(state, laterEvents(state, l), now);
   return mergeChanges({ inserts: [], updates: endSegments(l, now), deletes: [] }, removal);
 }
