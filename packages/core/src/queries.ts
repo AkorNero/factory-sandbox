@@ -77,6 +77,8 @@ export interface DayView {
   done: { count: number; total: number; items: ItemView[] };
   someday: { count: number; items: ItemView[] };
   strip: StripDay[];
+  /** What the midnight jobs did to the current day (today of "now"), whichever day is open. */
+  overnight: { carried: ItemView[]; skipped: ItemView[] };
 }
 
 const STRIP_DAYS = 8; // today and the next 7
@@ -257,6 +259,13 @@ export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateS
     };
   });
 
+  // the banner is about the night that started today: carried items are those marked with today's date
+  const leaves = live.filter((t) => !hasSubtasks.has(t.id)).sort((a, b) => a.position - b.position);
+  const overnight = {
+    carried: leaves.filter((t) => t.carried_on === start && !t.skipped_at).map(toItem),
+    skipped: leaves.filter((t) => t.skipped_at && dateOf(t.skipped_at) === start).map(toItem),
+  };
+
   return {
     date,
     isToday: date === dateOf(now),
@@ -265,5 +274,6 @@ export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateS
     done: { count: done.length, total: dayTasks.length, items: done.map(toItem) },
     someday: { count: someday.length, items: someday.map(toItem) },
     strip,
+    overnight,
   };
 }
