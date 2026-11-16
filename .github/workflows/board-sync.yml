@@ -1,0 +1,68 @@
+name: Sync project board
+on:
+  issues:
+    types: [opened, reopened, closed, labeled, unlabeled, assigned, unassigned]
+  pull_request:
+    types: [opened, reopened, closed]
+  schedule:
+    - cron: "*/30 * * * *"   # catches blocker links, which fire no event
+  workflow_dispatch:
+
+concurrency:
+  group: project-board
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.PROJECT_PAT }}
+      OWNER: ${{ github.repository_owner }}
+      REPO: ${{ github.repository }}
+      PROJECT: ${{ vars.PROJECT_NUMBER }}
+    steps:
+      - run: |
+          PROJECT_ID=$(gh project view "$PROJECT" --owner "$OWNER" --format json --jq .id)
+          FIELDS=$(gh project field-list "$PROJECT" --owner "$OWNER" --format json)
+
+          column_for() {
+            local i=$1 labels state
+            labels=",$(jq -r '[.labels[].name] | join(",")' <<<"$i"),"
+            state=$(jq -r .state <<<"$i")
+            if [[ "$labels" == *",wayfinder:"* ]]; then
+              if   [[ "$labels" == *",wayfinder:map,"* ]]; then [ "$state" = closed ] && echo "Wayfinder|Resolved" || echo "Wayfinder|Map"
+              elif [ "$state" = closed ]; then [ "$(jq -r .state_reason <<<"$i")" = not_planned ] && echo "Wayfinder|Out of scope" || echo "Wayfinder|Resolved"
+              elif [ "$(jq '.assignees | length' <<<"$i")" -gt 0 ]; then echo "Wayfinder|Claimed"
+              elif [ "$(jq '.issue_dependencies_summary.blocked_by // 0' <<<"$i")" -gt 0 ]; then echo "Wayfinder|Blocked"
+              else echo "Wayfinder|Frontier"; fi
+            elif jq -e .pull_request <<<"$i" >/dev/null; then
+              [ "$state" = closed ] && echo "Stage|Done" || echo "Stage|In review"
+            elif [ "$state" = closed ]; then echo "Stage|Done"
+            elif [ "$(jq '.assignees | length' <<<"$i")" -gt 0 ]; then echo "Stage|In progress"
+            elif [[ "$labels" == *",needs-info,"* ]]; then echo "Stage|Needs info"
+            elif [[ "$labels" == *",ready-for-agent,"* ]]; then echo "Stage|Ready for agent"
+            elif [[ "$labels" == *",ready-for-human,"* ]]; then echo "Stage|Ready for human"
+            else echo "Stage|Triage"; fi
+          }
+
+          sync_one() {
+            local i fc field col fid oid item
+            i=$(gh api "repos/$REPO/issues/$1")
+            fc=$(column_for "$i"); field=${fc%%|*}; col=${fc#*|}
+            fid=$(jq -r --arg f "$field" '.fields[] | select(.name==$f) | .id' <<<"$FIELDS")
+            oid=$(jq -r --arg f "$field" --arg c "$col" '.fields[] | select(.name==$f) | .options[] | select(.name==$c) | .id' <<<"$FIELDS")
+            item=$(gh project item-add "$PROJECT" --owner "$OWNER" --url "$(jq -r .html_url <<<"$i")" --format json --jq .id)
+            gh project item-edit --project-id "$PROJECT_ID" --id "$item" --field-id "$fid" --single-select-option-id "$oid"
+            echo "#$1 -> $field: $col"
+          }
+
+          case "$GITHUB_EVENT_NAME" in
+            issues|pull_request)
+              N=$(jq -r '(.issue // .pull_request).number' "$GITHUB_EVENT_PATH")
+              sync_one "$N"
+              if [ "$GITHUB_EVENT_NAME" = issues ] && [[ "$(jq -r .action "$GITHUB_EVENT_PATH")" =~ ^(closed|reopened)$ ]]; then
+                for d in $(gh api "repos/$REPO/issues/$N/dependencies/blocking" --jq '.[].number'); do sync_one "$d"; done
+              fi ;;
+            *)
+              gh issue list -R "$REPO" --state all --limit 500 --json number --jq '.[].number' |
+                while read -r n; do sync_one "$n"; done ;;
+          esac
