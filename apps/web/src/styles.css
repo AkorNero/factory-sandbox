@@ -257,7 +257,8 @@ h1 {
   font-size: 12px;
   color: var(--mute);
 }
-.sheet input {
+.sheet input,
+.sheet select {
   font: inherit;
   font-size: 15px;
   color: var(--ink);
@@ -268,6 +269,7 @@ h1 {
 }
 .sheet .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .sheet .actions button {
@@ -352,4 +354,77 @@ button.chip.sel {
   height: 1px;
   opacity: 0;
   pointer-events: none;
+}
+
+/* Recurrence: the tag after a title, and the "Repeat…" picker in the tap menus. */
+.rtag {
+  font-size: 11px;
+  border-radius: 9px;
+  padding: 1px 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  white-space: nowrap;
+}
+.now-card .rtag {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+.repeat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.repeat legend {
+  font-size: 12px;
+  color: var(--mute);
+  padding: 0 4px;
+}
+.repeat small {
+  color: var(--mute);
+}
+.repeat .weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.repeat .chip-day {
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.repeat .chip-day.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.sheet .repeat-open {
+  font: inherit;
+  font-size: 14px;
+  align-self: flex-start;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.repeat .primary {
+  font: inherit;
+  font-size: 14px;
+  align-self: flex-start;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: #fff;
+  border-radius: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
 }

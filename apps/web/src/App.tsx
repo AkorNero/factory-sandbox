@@ -5,13 +5,16 @@ import {
   canMoveEvent,
   canPickDay,
   canPlace,
+  canRepeat,
   canUndate,
   dayView,
+  recurrenceLabel,
   taskItem,
   today,
   type Command,
   type DayView,
   type ItemView,
+  type RecurrenceRule,
   type State,
   type StripDay,
 } from '@dayplanner/core';
@@ -22,6 +25,7 @@ import type { Clock } from './clock.ts';
 import { anytimeDrop, dayDrop, DragProvider, type DragSource, type DropTarget } from './drag.tsx';
 import { DayEvents, DayTabs, EventMenu, NowAndNext, type EventActions } from './Events.tsx';
 import { AddField, Pill, label, type ItemActions } from './Items.tsx';
+import { RepeatSection } from './Repeat.tsx';
 import { runCommand, useStoreState } from './store/adapter.ts';
 
 /** Local calendar math for labels only: dates are plain strings, so go through UTC to avoid timezone shifts. */
@@ -39,10 +43,18 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
   const [picked, setPicked] = useState<string[]>([]);
   const date = opened && opened > todayDate ? opened : todayDate;
   const view = useMemo(() => (state ? dayView(state, date, now, picked) : null), [state, date, now, picked]);
+  // Occurrences are real rows: make the ones for the days on screen (the strip and the day opened) that do not exist yet.
+  const shownDays = (view?.strip ?? []).map((d) => d.date).concat(date).join();
+  const series = state?.series;
+  useEffect(() => {
+    if (!series) return;
+    void runCommand(db, { type: 'materialise', dates: shownDays.split(',') }, clock.now());
+  }, [db, clock, series, shownDays]);
   const dayLabel = (d: string) => fmt(d, { weekday: 'short', day: 'numeric', month: 'short' });
 
   const [eventMenuId, setEventMenuId] = useState<string | null>(null);
   const menuEvent = state?.events.find((e) => e.id === eventMenuId) ?? null;
+  const menuSeries = menuEvent?.series_id ? state?.series.find((s) => s.id === menuEvent.series_id) : undefined;
   const [menuId, setMenuId] = useState<string | null>(null);
   const menuItem = state && menuId ? taskItem(state, menuId, now) : undefined;
   const run = (command: Command) => runCommand(db, command, clock.now());
@@ -128,6 +140,7 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
                 item={menuItem}
                 canSend={canUndate(state!, menuItem.id)}
                 canAddSub={canAddSubtask(state!, menuItem.parentId ?? menuItem.id)}
+                canRepeat={canRepeat(state!, menuItem.id)}
                 canDoParentToday={!!menuItem.parentId && canDateTask(state!, menuItem.parentId, todayDate)}
                 today={todayDate}
                 onClose={() => setMenuId(null)}
@@ -154,6 +167,9 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
               await run({ type: 'setEventTimes', id: menuEvent.id, start, end });
             }}
             onDelete={() => run({ type: 'deleteEvent', id: menuEvent.id })}
+            recurrence={menuSeries ? recurrenceLabel(menuSeries) : null}
+            canRepeat={canRepeat(state!, menuEvent.id)}
+            onRepeat={(recurrence) => run({ type: 'setRecurrence', id: menuEvent.id, seriesId: crypto.randomUUID(), recurrence })}
           />
         )}
         {toast && (
@@ -267,7 +283,7 @@ const ANYTIME_SHOWN = 6;
 const DONE_SHOWN = 4;
 
 /** Pills that collapse to `limit` with a "+N more" / "Show less" button. */
-function Collapsible({ items, limit, ...actions }: { items: ItemView[]; limit: number } & ItemActions) {
+function Collapsible({ items, limit, ...actions }: { items: ItemView[]; limit: number; fullTag?: boolean } & ItemActions) {
   const [all, setAll] = useState(false);
   const shown = all ? items : items.slice(0, limit);
   const more = items.length - limit;
@@ -299,7 +315,7 @@ function Anytime({
       <h2 id="anytime-h" className="sec">
         {view.isToday ? 'Anytime today' : 'Not placed'} <span className="count" data-testid="anytime-count">{view.anytime.count}</span>
       </h2>
-      <Collapsible items={view.anytime.items} limit={ANYTIME_SHOWN} {...actions} />
+      <Collapsible items={view.anytime.items} limit={ANYTIME_SHOWN} fullTag={!view.isToday} {...actions} />
       <AddField placeholder={view.isToday ? '+ Task today' : `+ Task on ${dayName}`} onAdd={onAdd} />
     </section>
   );
@@ -319,7 +335,7 @@ function DoneToday({ view, ...actions }: { view: DayView } & ItemActions) {
       <p className="mute">
         {count} of {total} done
       </p>
-      <Collapsible items={items} limit={DONE_SHOWN} {...actions} />
+      <Collapsible items={items} limit={DONE_SHOWN} fullTag={!view.isToday} {...actions} />
     </section>
   );
 }
@@ -330,6 +346,7 @@ function TaskMenu({
   canSend,
   canAddSub,
   canDoParentToday,
+  canRepeat: repeatable,
   today,
   onClose,
   run,
@@ -341,6 +358,8 @@ function TaskMenu({
   canAddSub: boolean;
   /** For a Sub-task: the core says its parent can be dated to today. */
   canDoParentToday: boolean;
+  /** The core says "Repeat…" is offered for this Task. */
+  canRepeat: boolean;
   today: string;
   onClose: () => void;
   run: (c: Command) => Promise<unknown>;
@@ -415,6 +434,7 @@ function TaskMenu({
             onKeyDown={addSub}
           />
         )}
+        <RepeatSection recurrence={item.recurrence} canRepeat={repeatable} onRepeat={(recurrence) => runAndClose({ type: 'setRecurrence', id: item.id, seriesId: crypto.randomUUID(), recurrence })} />
         <div className="actions">
           <button type="submit" className="primary">Save</button>
           <button type="button" onClick={onClose}>Cancel</button>
