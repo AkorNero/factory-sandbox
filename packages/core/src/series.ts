@@ -17,14 +17,17 @@ export function parseTemplate(series: Pick<SeriesRow, 'template'>): SeriesTempla
 
 /**
  * Make the Occurrences that fall on the days and do not exist yet. Existing means a row with the Occurrence's id
- * (deleted ones included, so a deleted Occurrence stays gone) or any row of the series that was made for that day
+ * (deleted ones included, so a deleted Occurrence stays gone) or any row of the series' lineage that was made for that day
  * (an Occurrence that was moved keeps its original day, so no duplicate appears there).
  * The ids are fixed by series and day, so two devices doing this from their own state write the same rows.
  */
 export function materialise(state: State, dates: DateStr[], now: Now): Changes {
+  // a day is taken for the whole lineage: a split segment must not make a second Occurrence for a day another segment made
+  const lineages = new Map(state.series.map((s) => [s.id, s.lineage_id]));
+  const dayKey = (seriesId: string, date: DateStr) => `${lineages.get(seriesId) ?? seriesId}|${date}`;
   const taken = new Set<string>();
-  for (const t of state.tasks) if (t.series_id && t.occurrence_date) taken.add(`${t.series_id}|${t.occurrence_date}`);
-  for (const e of state.events) if (e.series_id && e.occurrence_date) taken.add(`${e.series_id}|${e.occurrence_date}`);
+  for (const t of state.tasks) if (t.series_id && t.occurrence_date) taken.add(dayKey(t.series_id, t.occurrence_date));
+  for (const e of state.events) if (e.series_id && e.occurrence_date) taken.add(dayKey(e.series_id, e.occurrence_date));
   const ids = new Set([...state.tasks.map((t) => t.id), ...state.events.map((e) => e.id)]);
 
   const inserts: Insert[] = [];
@@ -32,7 +35,7 @@ export function materialise(state: State, dates: DateStr[], now: Now): Changes {
   for (const date of [...new Set(dates)].sort()) {
     for (const series of state.series) {
       const id = occurrenceId(series.id, date);
-      if (ids.has(id) || taken.has(`${series.id}|${date}`) || occurrenceDates(series, date, date).length === 0) continue;
+      if (ids.has(id) || taken.has(dayKey(series.id, date)) || occurrenceDates(series, date, date).length === 0) continue;
       const template = parseTemplate(series);
       if (series.kind === 'event') {
         const row: EventRow = {
@@ -92,7 +95,7 @@ export function canRepeat(state: State, id: string): boolean {
 const isInt = (n: unknown, min: number, max: number): n is number => Number.isInteger(n) && (n as number) >= min && (n as number) <= max;
 
 /** The series columns for a rule, or null when the rule is not valid. */
-function ruleColumns(r: RecurrenceRule): Pick<SeriesRow, 'rule' | 'interval_n' | 'weekdays' | 'day_of_month'> | null {
+export function ruleColumns(r: RecurrenceRule): Pick<SeriesRow, 'rule' | 'interval_n' | 'weekdays' | 'day_of_month'> | null {
   switch (r.rule) {
     case 'every_n_days':
       return isInt(r.interval, 1, 999) ? { rule: r.rule, interval_n: r.interval, weekdays: null, day_of_month: null } : null;
@@ -109,7 +112,7 @@ function ruleColumns(r: RecurrenceRule): Pick<SeriesRow, 'rule' | 'interval_n' |
 }
 
 /** Fold several changes to the same row into one update (so a row gets one PATCH). */
-function coalesce(updates: Update[]): Update[] {
+export function coalesce(updates: Update[]): Update[] {
   const byRow = new Map<string, Update>();
   for (const u of updates) {
     const key = `${u.table}|${u.id}`;
