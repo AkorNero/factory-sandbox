@@ -176,6 +176,13 @@ h1 {
   text-align: left;
   cursor: pointer;
 }
+.labels {
+  display: inline-flex;
+  gap: 4px;
+}
+.parent-link {
+  color: var(--mute);
+}
 .tick.parent {
   border-style: dashed;
 }

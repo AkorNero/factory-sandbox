@@ -39,6 +39,26 @@ test('"+ Sub-task" in a Task\'s menu adds Sub-tasks, shown as "Parent › Sub-ta
   await expect(page.getByPlaceholder('+ Sub-task of Report')).toBeVisible();
 });
 
+test('tapping "Parent ›" on a Sub-task opens the parent Task\'s own menu: rename it, or delete it with its Sub-tasks', async ({ page }) => {
+  await page.goto('/?db=sub-parent-menu');
+  await type(page, '+ Task today', 'Report');
+  await page.getByRole('button', { name: 'Report', exact: true }).click();
+  await type(page, '+ Sub-task', 'Draft intro');
+  await page.getByRole('button', { name: 'Cancel' }).click();
+
+  await anytime(page).getByRole('button', { name: 'Open Report' }).click();
+  const menu = page.getByRole('dialog', { name: 'Edit task' });
+  await expect(menu.getByLabel('Title')).toHaveValue('Report');
+  await menu.getByLabel('Title').fill('Quarterly report');
+  await menu.getByRole('button', { name: 'Save' }).click();
+  await expect(anytime(page).getByRole('listitem')).toHaveText([/Quarterly report › Draft intro/]);
+
+  await anytime(page).getByRole('button', { name: 'Open Quarterly report' }).click();
+  await menu.getByRole('button', { name: 'Delete' }).click();
+
+  await expect(page.getByTestId('anytime-count')).toHaveText('0');
+});
+
 test('the first Sub-task of a placed Task takes over its Placement', async ({ page }) => {
   await page.goto('/?db=sub-place');
   await type(page, '+ Event, e.g. Gym 18-19', 'Deep work 10-11');

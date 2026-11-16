@@ -32,6 +32,30 @@ const Progress = ({ item }: { item: ItemView }) =>
     </span>
   ) : null;
 
+/**
+ * The item's label, opening its tap menu. A Sub-task reads "Parent › Sub-task" and the "Parent ›" part opens the
+ * parent's own menu: a Task with Sub-tasks is listed on no day, so this is how it is reached (rename, delete, Repeat…).
+ */
+function Label({ item, onOpen }: { item: ItemView; onOpen: ItemActions['onOpen'] }) {
+  if (!item.parentId) {
+    return (
+      <button type="button" className="label" aria-haspopup="dialog" onClick={() => onOpen(item.id)}>
+        {item.title}
+      </button>
+    );
+  }
+  return (
+    <span className="labels">
+      <button type="button" className="label parent-link" aria-haspopup="dialog" aria-label={`Open ${item.parentTitle}`} onClick={() => onOpen(item.parentId!)}>
+        {item.parentTitle} ›
+      </button>{' '}
+      <button type="button" className="label" aria-haspopup="dialog" aria-label={label(item)} onClick={() => onOpen(item.id)}>
+        {item.title}
+      </button>
+    </span>
+  );
+}
+
 function Tick({ item, onTick }: { item: ItemView; onTick: ItemActions['onTick'] }) {
   const isDone = item.completedTime !== null;
   return (
@@ -54,9 +78,7 @@ export function Pill({ item, onTick, onOpen, fullTag }: { item: ItemView; fullTa
   return (
     <li className={`pill ${item.carriedOver ? 'carried' : ''} ${isDone ? 'done' : ''}`} {...(isDone ? {} : drag)}>
       <Tick item={item} onTick={onTick} />
-      <button type="button" className="label" aria-haspopup="dialog" onClick={() => onOpen(item.id)}>
-        {label(item)}
-      </button>
+      <Label item={item} onOpen={onOpen} />
       {item.carriedOver && <span className="badge warn">↪</span>}
       <Recurrence recurrence={item.recurrence} full={fullTag} />
       <Progress item={item} />
@@ -72,9 +94,7 @@ export function TaskRow({ item, onTick, onOpen }: { item: ItemView } & ItemActio
   return (
     <li className={`task-row ${isDone ? 'done' : ''}`} {...(isDone ? {} : drag)}>
       <Tick item={item} onTick={onTick} />
-      <button type="button" className="label" aria-haspopup="dialog" onClick={() => onOpen(item.id)}>
-        {label(item)}
-      </button>
+      <Label item={item} onOpen={onOpen} />
       <Recurrence recurrence={item.recurrence} full />
       <Progress item={item} />
       {isDone && <small className="mute">{doneNote(item)}</small>}
