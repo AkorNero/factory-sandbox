@@ -26,6 +26,8 @@ export const SCHEMA = {
     completed_at: 'text',
     skipped_at: 'text',
     carried_over: 'integer',
+    carried_on: 'text',
+    carried_from_event_id: 'text',
     position: 'real',
     series_id: 'text',
     occurrence_date: 'text',
