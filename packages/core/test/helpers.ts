@@ -1,4 +1,4 @@
-import { emptyState, type State, type TaskRow, type EventRow } from '../src/index.ts';
+import { emptyState, type EventRow, type SeriesRow, type State, type TaskRow } from '../src/index.ts';
 
 /** Local "now" the way the Clock supplies it: local date and time with the UTC offset. */
 export const MON_10_15 = '2026-11-16T10:15:00+01:00';
@@ -41,4 +41,23 @@ export function anEvent(over: Partial<EventRow> & { id: string }): EventRow {
 
 export function aState(parts: Partial<State> = {}): State {
   return { ...emptyState(), ...parts };
+}
+
+/** A Task series that repeats daily from today; override the rule fields per test. */
+export function aSeries(over: Partial<SeriesRow> & { id: string }): SeriesRow {
+  return {
+    lineage_id: over.id,
+    kind: 'task',
+    rule: 'every_n_days',
+    interval_n: 1,
+    weekdays: null,
+    day_of_month: null,
+    anchor_date: TODAY,
+    starts_on: TODAY,
+    ends_on: null,
+    template: JSON.stringify({ title: 'Water plants', subtasks: [] }),
+    created_at: '2026-11-15T09:00:00+01:00',
+    updated_at: '2026-11-15T09:00:00+01:00',
+    ...over,
+  };
 }
