@@ -115,6 +115,10 @@ export type Command =
       /** null adds a Someday Task. */
       date: DateStr | null;
     }
+  | { type: 'addEvent'; id: string; title: string; date: DateStr; start: TimeStr; end: TimeStr }
+  | { type: 'renameEvent'; id: string; title: string }
+  | { type: 'setEventTimes'; id: string; start: TimeStr; end: TimeStr }
+  | { type: 'deleteEvent'; id: string }
   | { type: 'tickTask'; id: string }
   | { type: 'untickTask'; id: string }
   /** Edit a done Task's Completion time to `time` ('HH:MM') on the day it already has. */

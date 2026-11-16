@@ -1,0 +1,185 @@
+/* Events on Today: Now, Next, tabs and the Event menu. Tokens come from styles.css. */
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 16px;
+  margin-top: 12px;
+}
+.ev-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--mute);
+}
+.big {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 4px 0 10px;
+}
+.free .big {
+  margin-bottom: 0;
+}
+.free .mute {
+  margin: 4px 0 0;
+}
+
+.now-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.now-card {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 18px;
+  padding: 16px 18px;
+}
+.now-card .ev-label {
+  color: rgba(255, 255, 255, 0.85);
+}
+.now-card.also {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+.now-card.also .ev-label {
+  color: var(--mute);
+}
+.now-card.also .big {
+  font-size: 20px;
+}
+.bar {
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.3);
+  overflow: hidden;
+}
+.bar > div {
+  height: 100%;
+  background: #fff;
+}
+.now-card.also .bar {
+  background: rgba(127, 127, 127, 0.25);
+}
+.now-card.also .bar > div {
+  background: var(--accent);
+}
+
+.ev-title {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.ev-title.big {
+  display: block;
+  font-size: 24px;
+  font-weight: 700;
+}
+.now-card.also .ev-title.big {
+  font-size: 20px;
+}
+.ev-title.h3 {
+  font-size: 16px;
+  font-weight: 700;
+}
+.next-ev {
+  margin-top: 6px;
+}
+.next-ev .mute {
+  display: inline;
+}
+
+.seg {
+  display: flex;
+  gap: 2px;
+  background: var(--line);
+  border-radius: 12px;
+  padding: 3px;
+  margin-top: 20px;
+}
+.seg button {
+  flex: 1;
+  font: inherit;
+  font-size: 14px;
+  color: var(--mute);
+  background: none;
+  border: 0;
+  border-radius: 10px;
+  padding: 7px 8px;
+  cursor: pointer;
+}
+.seg button.on {
+  background: var(--card);
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.tabcount {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: rgba(127, 127, 127, 0.15);
+  color: var(--mute);
+  border-radius: 9px;
+  padding: 1px 7px;
+}
+.seg button.on .tabcount {
+  background: var(--accent);
+  color: #fff;
+}
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 6px 14px 14px;
+  margin-top: 8px;
+  min-height: 120px;
+}
+.ev-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.ev-row .ev-title {
+  font-weight: 700;
+}
+.ev-row.past .ev-title {
+  color: var(--mute);
+}
+.ev-row .mute {
+  margin: 0;
+}
+.rel {
+  color: var(--accent);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.past .rel {
+  color: var(--mute);
+}
+.msg {
+  font-size: 13px;
+  margin: 6px 4px 0;
+}
+.msg.error {
+  color: var(--warn);
+}
+.msg.ok {
+  color: var(--mute);
+}
+
+.times {
+  display: flex;
+  gap: 12px;
+}
+.times label {
+  flex: 1;
+}

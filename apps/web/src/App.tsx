@@ -3,6 +3,7 @@ import { useStatus } from '@powersync/react';
 import type { AbstractPowerSyncDatabase } from '@powersync/web';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { Clock } from './clock.ts';
+import { DayTabs, EventMenu, NowAndNext } from './Events.tsx';
 import { runCommand, useStoreState } from './store/adapter.ts';
 
 /** Local calendar math for labels only: dates are plain strings, so go through UTC to avoid timezone shifts. */
@@ -17,6 +18,8 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
   const date = today(now);
   const view = useMemo(() => (state ? dayView(state, date, now) : null), [state, date, now]);
 
+  const [eventMenuId, setEventMenuId] = useState<string | null>(null);
+  const menuEvent = state?.events.find((e) => e.id === eventMenuId) ?? null;
   const [menuId, setMenuId] = useState<string | null>(null);
   const menuItem = view && menuId ? [...view.anytime.items, ...view.done.items].find((i) => i.id === menuId) : undefined;
   const run = (command: Command) => runCommand(db, command, clock.now());
@@ -31,6 +34,7 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
       {view && (
         <>
           <Strip days={view.strip} selected={view.date} />
+          <NowAndNext view={view} open={setEventMenuId} />
           <Anytime
             view={view}
             onAdd={(title) => run({ type: 'addTask', id: crypto.randomUUID(), title, date })}
@@ -39,7 +43,24 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
           />
           <DoneToday view={view} onTick={tick} onOpen={setMenuId} />
           {menuItem && <TaskMenu item={menuItem} onClose={() => setMenuId(null)} run={run} />}
+          <DayTabs
+            view={view}
+            open={setEventMenuId}
+            onAdd={(title, start, end) => run({ type: 'addEvent', id: crypto.randomUUID(), title, date, start, end })}
+          />
         </>
+      )}
+      {menuEvent && (
+        <EventMenu
+          key={menuEvent.id}
+          event={menuEvent}
+          onClose={() => setEventMenuId(null)}
+          onSave={async (title, start, end) => {
+            await run({ type: 'renameEvent', id: menuEvent.id, title });
+            await run({ type: 'setEventTimes', id: menuEvent.id, start, end });
+          }}
+          onDelete={() => run({ type: 'deleteEvent', id: menuEvent.id })}
+        />
       )}
     </main>
   );

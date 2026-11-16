@@ -12,3 +12,13 @@ export function addDays(date: DateStr, n: number): DateStr {
   const t = new Date(Date.UTC(y, m - 1, d + n));
   return t.toISOString().slice(0, 10);
 }
+
+/** Minutes since midnight of an 'HH:MM' time. */
+export const minutesOf = (time: string): number => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+
+/** "45m", "2h", "2h 20m". */
+export function formatDuration(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h === 0 ? `${m}m` : m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
