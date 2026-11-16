@@ -26,7 +26,7 @@ import type { AbstractPowerSyncDatabase } from '@powersync/web';
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { Clock } from './clock.ts';
 import { anytimeDrop, dayDrop, DragProvider, type DragSource, type DropTarget } from './drag.tsx';
-import { DayEvents, DayTabs, EventMenu, NowAndNext, type EventActions } from './Events.tsx';
+import { DayTabs, EventMenu, NowAndNext, type EventActions } from './Events.tsx';
 import { AddField, Pill, label, type ItemActions } from './Items.tsx';
 import { RepeatSection } from './Repeat.tsx';
 import { ScopePrompt, useScopeAsk } from './Scope.tsx';
@@ -136,13 +136,6 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
               />
             )}
             {view.isToday && <NowAndNext view={view} actions={actions} />}
-            {!view.isToday && (
-              <DayEvents
-                view={view}
-                actions={actions}
-                onAdd={(title, start, end) => run({ type: 'addEvent', id: crypto.randomUUID(), title, date, start, end })}
-              />
-            )}
             <Anytime
               view={view}
               dayName={fmt(date, { weekday: 'short' })}
@@ -165,14 +158,12 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
                 run={run}
               />
             )}
-            {view.isToday && (
-              <DayTabs
-                view={view}
-                actions={actions}
-                onAdd={(title, start, end) => run({ type: 'addEvent', id: crypto.randomUUID(), title, date, start, end })}
-                onAddSomeday={(title) => run({ type: 'addTask', id: crypto.randomUUID(), title, date: null })}
-              />
-            )}
+            <DayTabs
+              view={view}
+              actions={actions}
+              onAdd={(title, start, end) => run({ type: 'addEvent', id: crypto.randomUUID(), title, date, start, end })}
+              onAddSomeday={(title) => run({ type: 'addTask', id: crypto.randomUUID(), title, date: null })}
+            />
           </>
         )}
         {menuEvent && (

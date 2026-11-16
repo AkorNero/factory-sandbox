@@ -78,7 +78,7 @@ test('an Event Occurrence: times → This and following; Change schedule removes
   await page.getByRole('button', { name: 'Start repeating' }).click();
 
   await chip(page, /Wednesday 18 November/).click();
-  const events = page.getByTestId('day-events');
+  const events = page.getByTestId('tab-panel');
   await events.getByRole('button', { name: /^Gym/ }).click();
   await page.getByLabel('Start').fill('17:00');
   await page.getByRole('button', { name: 'Save' }).click();
@@ -97,9 +97,9 @@ test('an Event Occurrence: times → This and following; Change schedule removes
   await page.getByRole('button', { name: 'Apply new schedule' }).click();
   for (const day of [/Tuesday 17 November/, /Wednesday 18 November/, /Thursday 19 November/]) {
     await chip(page, day).click();
-    await expect(page.getByTestId('events-count')).toHaveText('0');
+    await expect(page.getByRole('tab', { name: /^Events/ })).toHaveText(/0$/);
   }
   await chip(page, /Monday 23 November/).click();
-  await expect(page.getByTestId('events-count')).toHaveText('1');
+  await expect(page.getByRole('tab', { name: /^Events/ })).toHaveText(/1$/);
   await expect(events).toContainText('Gym');
 });

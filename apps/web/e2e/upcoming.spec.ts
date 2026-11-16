@@ -36,14 +36,27 @@ test('tapping a day shows it in the same layout; its "+ …" fields add to that 
   await type(page, '+ Task in Planning', 'Write agenda');
 
   await expect(anytime(page).getByRole('listitem')).toHaveText([/Book flights/]);
-  await expect(page.getByTestId('day-events')).toContainText('Planning');
-  await expect(page.getByTestId('day-events')).toContainText('Write agenda');
+  await expect(page.getByTestId('tab-panel')).toContainText('Planning');
+  await expect(page.getByTestId('tab-panel')).toContainText('Write agenda');
   await expect(dots(page, TUE)).toHaveAccessibleName('1 events, 2 tasks');
   await expect(dots(page, /^Today/)).toHaveAccessibleName('0 events, 0 tasks');
 
   await chip(page, /^Today/).click();
   await expect(heading(page)).toHaveText('Monday 16 November');
   await expect(page.getByRole('region', { name: /Anytime today/ })).toBeVisible();
+});
+
+test('another day has the Today layout\'s tabs, so a Task there can be dragged to Someday', async ({ page }) => {
+  await chip(page, TUE).click();
+  for (const name of [/^Events/, /^Earlier/, /^Someday/]) await expect(page.getByRole('tab', { name })).toBeVisible();
+  await type(page, '+ Task on Tue', 'Book flights');
+
+  await anytime(page).getByRole('button', { name: 'Book flights', exact: true }).dragTo(page.getByRole('tab', { name: /^Someday/ }));
+
+  await expect(page.locator('.toast')).toContainText('Sent “Book flights” to Someday');
+  await expect(page.getByTestId('anytime-count')).toHaveText('0');
+  await page.getByRole('tab', { name: /^Someday/ }).click();
+  await expect(page.getByTestId('tab-panel')).toContainText('Book flights');
 });
 
 test('"Pick a day" adds a later day to the strip until its ✕ removes it', async ({ page }) => {
@@ -108,7 +121,7 @@ test('dragging an Event onto a day chip moves it with its placed Tasks, still pl
   await expect(dots(page, TUE)).toHaveAccessibleName('1 events, 1 tasks');
 
   await chip(page, TUE).click();
-  const events = page.getByTestId('day-events');
+  const events = page.getByTestId('tab-panel');
   await expect(events).toContainText('Deep work');
   await expect(events.getByRole('listitem')).toHaveText([/Write intro/]); // still placed in it
   await expect(page.getByTestId('anytime-count')).toHaveText('0');

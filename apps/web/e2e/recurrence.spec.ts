@@ -60,13 +60,13 @@ test('"Repeat…" on an Event: weekdays; later Occurrences start with nothing pl
   await expect(page.getByTestId('next')).toContainText('Pack bag');
 
   await chip(page, /Tuesday 17 November/).click();
-  const events = page.getByTestId('day-events');
+  const events = page.getByTestId('tab-panel');
   await expect(events).toContainText('Gym');
   await expect(events).toContainText('↻ Mon/Tue');
   await expect(events).not.toContainText('Pack bag');
   // no Occurrence on Wednesday
   await chip(page, /Wednesday 18 November/).click();
-  await expect(page.getByTestId('events-count')).toHaveText('0');
+  await expect(page.getByRole('tab', { name: /^Events/ })).toHaveText(/0$/);
 });
 
 test('"Repeat…" on a Someday Task puts its first Occurrence on the first matching day and out of Someday', async ({ page }) => {
