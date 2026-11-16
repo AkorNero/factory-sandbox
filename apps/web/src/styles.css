@@ -176,6 +176,9 @@ h1 {
   text-align: left;
   cursor: pointer;
 }
+.tick.parent {
+  border-style: dashed;
+}
 .tick.on {
   background: var(--ok);
   border-color: var(--ok);

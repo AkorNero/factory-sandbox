@@ -1,11 +1,13 @@
 import {
   addDays,
+  canAddSubtask,
   canDateTask,
   canMoveEvent,
   canPickDay,
   canPlace,
   canUndate,
   dayView,
+  taskItem,
   today,
   type Command,
   type DayView,
@@ -15,7 +17,7 @@ import {
 } from '@dayplanner/core';
 import { useStatus } from '@powersync/react';
 import type { AbstractPowerSyncDatabase } from '@powersync/web';
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { Clock } from './clock.ts';
 import { anytimeDrop, dayDrop, DragProvider, type DragSource, type DropTarget } from './drag.tsx';
 import { DayEvents, DayTabs, EventMenu, NowAndNext, type EventActions } from './Events.tsx';
@@ -42,7 +44,7 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
   const [eventMenuId, setEventMenuId] = useState<string | null>(null);
   const menuEvent = state?.events.find((e) => e.id === eventMenuId) ?? null;
   const [menuId, setMenuId] = useState<string | null>(null);
-  const menuItem = view && menuId ? everyItem(view).find((i) => i.id === menuId) : undefined;
+  const menuItem = state && menuId ? taskItem(state, menuId, now) : undefined;
   const run = (command: Command) => runCommand(db, command, clock.now());
   const tick = (item: ItemView) => run({ type: item.completedTime ? 'untickTask' : 'tickTask', id: item.id });
 
@@ -122,7 +124,15 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
             />
             <DoneToday view={view} onTick={tick} onOpen={setMenuId} />
             {menuItem && (
-              <TaskMenu item={menuItem} canSend={canUndate(state!, menuItem.id)} today={todayDate} onClose={() => setMenuId(null)} run={run} />
+              <TaskMenu
+                item={menuItem}
+                canSend={canUndate(state!, menuItem.id)}
+                canAddSub={canAddSubtask(state!, menuItem.parentId ?? menuItem.id)}
+                canDoParentToday={!!menuItem.parentId && canDateTask(state!, menuItem.parentId, todayDate)}
+                today={todayDate}
+                onClose={() => setMenuId(null)}
+                run={run}
+              />
             )}
             {view.isToday && (
               <DayTabs
@@ -155,17 +165,6 @@ export function App({ clock, db }: { clock: Clock; db: AbstractPowerSyncDatabase
     </DragProvider>
   );
 }
-
-/** Everything on screen the tap menu can be opened for. */
-const everyItem = (view: DayView): ItemView[] => [
-  ...view.anytime.items,
-  ...view.someday.items,
-  ...view.done.items,
-  ...view.now.cards.flatMap((c) => c.tasks),
-  ...(view.next?.events.flatMap((e) => e.tasks) ?? []),
-  ...view.later.events.flatMap((e) => e.tasks),
-  ...view.earlier.events.flatMap((e) => e.tasks),
-];
 
 function SyncBadge() {
   const s = useStatus();
@@ -329,6 +328,8 @@ function DoneToday({ view, ...actions }: { view: DayView } & ItemActions) {
 function TaskMenu({
   item,
   canSend,
+  canAddSub,
+  canDoParentToday,
   today,
   onClose,
   run,
@@ -336,12 +337,28 @@ function TaskMenu({
   item: ItemView;
   /** The core says this Task can be sent to Someday. */
   canSend: boolean;
+  /** The core says a Sub-task can be added: to this Task, or for a Sub-task to its parent (never nested). */
+  canAddSub: boolean;
+  /** For a Sub-task: the core says its parent can be dated to today. */
+  canDoParentToday: boolean;
   today: string;
   onClose: () => void;
   run: (c: Command) => Promise<unknown>;
 }) {
   const [title, setTitle] = useState(item.title);
   const [time, setTime] = useState(item.completedTime ?? '');
+  const [added, setAdded] = useState<string[]>([]);
+  const parentId = item.parentId ?? item.id;
+  const addSub = async (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const input = e.currentTarget;
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    await run({ type: 'addSubtask', id: crypto.randomUUID(), parentId, title: text });
+    setAdded((a) => [...a, text]);
+  };
   const save = async (e: FormEvent) => {
     e.preventDefault();
     await run({ type: 'renameTask', id: item.id, title });
@@ -364,6 +381,10 @@ function TaskMenu({
     await run({ type: 'dateTask', id: item.id, date: today });
     onClose();
   };
+  const runAndClose = async (command: Command) => {
+    await run(command);
+    onClose();
+  };
   return (
     <div className="backdrop" onClick={onClose}>
       <form className="sheet" role="dialog" aria-label="Edit task" onClick={(e) => e.stopPropagation()} onSubmit={save}>
@@ -379,6 +400,21 @@ function TaskMenu({
           </label>
         )}
         {item.placement && <p className="mute">In {item.placement.title}</p>}
+        {item.subtasks && (
+          <p className="mute">
+            {item.subtasks.done} of {item.subtasks.total} Sub-tasks done
+          </p>
+        )}
+        {item.parentTitle && <p className="mute">Sub-task of “{item.parentTitle}”</p>}
+        {added.length > 0 && <p className="mute">Added: {added.join(', ')}</p>}
+        {canAddSub && (
+          <input
+            className="add"
+            placeholder={item.parentTitle ? `+ Sub-task of ${item.parentTitle}` : '+ Sub-task'}
+            aria-label={item.parentTitle ? `+ Sub-task of ${item.parentTitle}` : '+ Sub-task'}
+            onKeyDown={addSub}
+          />
+        )}
         <div className="actions">
           <button type="submit" className="primary">Save</button>
           <button type="button" onClick={onClose}>Cancel</button>
@@ -395,6 +431,16 @@ function TaskMenu({
           {canSend && (
             <button type="button" onClick={sendToSomeday}>
               Send to Someday
+            </button>
+          )}
+          {item.parentId && !item.completedTime && (
+            <button type="button" onClick={() => runAndClose({ type: 'tickTask', id: item.parentId! })}>
+              Tick all of “{item.parentTitle}”
+            </button>
+          )}
+          {canDoParentToday && (
+            <button type="button" onClick={() => runAndClose({ type: 'dateTask', id: item.parentId!, date: today })}>
+              Do “{item.parentTitle}” today
             </button>
           )}
           <button type="button" className="danger" onClick={remove}>Delete</button>

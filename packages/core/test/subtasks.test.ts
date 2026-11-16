@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apply, applyChanges, dayView, type Command, type State } from '../src/index.ts';
+import { apply, applyChanges, dayView, taskItem, type Command, type State } from '../src/index.ts';
 import { MON_10_15, TODAY, aState, aTask, anEvent } from './helpers.ts';
 
 const run = (state: State, command: Command, now = MON_10_15) => applyChanges(state, apply(state, command, now));
@@ -123,5 +123,17 @@ describe('a Task being done exactly when all its Sub-tasks are', () => {
 
     expect(task(after, 'rep')?.completed_at).toBeNull();
     expect(parentRow(after)?.subtasks).toEqual({ done: 0, total: 1 });
+  });
+});
+
+describe('reaching a parent', () => {
+  it('is possible by id although a Task with Sub-tasks is listed on no day, so its menu can stay open', () => {
+    const state = aState({ tasks: [aTask({ id: 'rep', title: 'Report' })] });
+    const after = run(state, { type: 'addSubtask', id: 's1', parentId: 'rep', title: 'Draft' });
+
+    const view = dayView(after, TODAY, MON_10_15);
+    expect([...view.anytime.items, ...view.done.items, ...view.someday.items].map((i) => i.id)).toEqual(['s1']);
+    expect(taskItem(after, 'rep', MON_10_15)).toMatchObject({ title: 'Report', subtasks: { done: 0, total: 1 }, parentId: null });
+    expect(taskItem(after, 'nope', MON_10_15)).toBeUndefined();
   });
 });

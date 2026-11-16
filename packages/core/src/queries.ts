@@ -159,7 +159,8 @@ function doneInEvent(task: TaskRow, events: Map<string, EventRow>): EventRow | u
  * Everything the screen shows for one day. State, a date and "now" in; a view out. Nothing here is stored.
  * `pickedDays` are the later days the user added to the strip with "Pick a day".
  */
-export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateStr[] = []): DayView {
+/** What the views need to turn rows into items. */
+function itemContext(state: State, now: Now) {
   const live = state.tasks.filter((t) => !t.deleted_at);
   const byId = new Map(live.map((t) => [t.id, t]));
   const events = new Map(state.events.filter((e) => !e.deleted_at).map((e) => [e.id, e]));
@@ -186,6 +187,21 @@ export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateS
     placement: placedIn(t) ? { eventId: t.event_id!, title: placedIn(t)!.title } : null,
     doneIn: t.completed_at ? (doneInEvent(t, events)?.title ?? null) : null,
   });
+  return { live, byId, events, placedIn, effectiveDay, subtasksOf, isDone, toItem };
+}
+
+/**
+ * One Task or Sub-task as an item, wherever it is on screen (or on no screen: a Task with Sub-tasks is never
+ * listed on a day, but its tap menu can still be opened from one of its Sub-tasks).
+ */
+export function taskItem(state: State, id: string, now: Now): ItemView | undefined {
+  const c = itemContext(state, now);
+  const t = c.byId.get(id);
+  return t && c.toItem(t);
+}
+
+export function dayView(state: State, date: DateStr, now: Now, pickedDays: DateStr[] = []): DayView {
+  const { live, byId, events, placedIn, effectiveDay, isDone, toItem } = itemContext(state, now);
   const placed = (eventId: string) =>
     live
       .filter((t) => t.event_id === eventId && !t.skipped_at)

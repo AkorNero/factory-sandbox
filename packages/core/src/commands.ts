@@ -69,10 +69,16 @@ function addTask(state: State, cmd: Extract<Command, { type: 'addTask' }>, now: 
 
 const nextPosition = (state: State) => Math.max(0, ...state.tasks.map((t) => t.position)) + 1;
 
+/** Whether a Sub-task can be added to the Task: it exists and is not a Sub-task itself (Sub-tasks never have Sub-tasks). */
+export function canAddSubtask(state: State, id: string): boolean {
+  const task = liveTask(state, id);
+  return !!task && !task.parent_id;
+}
+
 function addSubtask(state: State, cmd: Extract<Command, { type: 'addSubtask' }>, now: Now): Changes {
   const title = cmd.title.trim();
   const parent = liveTask(state, cmd.parentId);
-  if (!title || !parent || parent.parent_id) return noChanges();
+  if (!title || !parent || !canAddSubtask(state, parent.id)) return noChanges();
   const row: TaskRow = {
     id: cmd.id,
     parent_id: parent.id,
