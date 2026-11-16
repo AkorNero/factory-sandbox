@@ -3,6 +3,7 @@ import { dateOf } from './dates.ts';
 import { runMidnight } from './midnight.ts';
 import type { Changes, Command, DateStr, EventRow, Now, State, TaskRow } from './types.ts';
 import { noChanges } from './types.ts';
+import { nextArrivesBy } from './recurrence.ts';
 import { materialise, setRecurrence } from './series.ts';
 import { changeSchedule, editFollowing, stopRepeating } from './series-edit.ts';
 
@@ -228,13 +229,26 @@ function updateTask(id: string, set: Record<string, unknown>): Changes {
 }
 
 /**
+ * The drag limit: a Task Occurrence (or a Sub-task of one) cannot be put on or past the day of the next Occurrence
+ * of its series, so Occurrences never overtake each other. The next one is found from the schedule, counted from
+ * the Occurrence's own day, whether or not it has been made yet. Anything else has no limit; Events have none at all.
+ */
+function withinDragLimit(state: State, task: TaskRow, date: DateStr): boolean {
+  const owner = task.parent_id ? liveTask(state, task.parent_id) : task;
+  if (!owner?.series_id || !owner.occurrence_date) return true;
+  return !nextArrivesBy(state.series, owner.series_id, owner.occurrence_date, date);
+}
+
+/**
  * Whether the Task or Sub-task can be placed into the Event: both exist, the Task has no Sub-tasks
- * (only its Sub-tasks are placed) and it is not already there. A drag asks this before offering a drop.
+ * (only its Sub-tasks are placed), it is not already there, and the Event's day is within its drag limit.
+ * A drag asks this before offering a drop.
  */
 export function canPlace(state: State, id: string, eventId: string): boolean {
   const task = liveTask(state, id);
-  if (!task || !findEvent(state, eventId) || task.event_id === eventId) return false;
-  return !hasSubtasks(state, id);
+  const event = findEvent(state, eventId);
+  if (!task || !event || task.event_id === eventId) return false;
+  return !hasSubtasks(state, id) && withinDragLimit(state, task, event.date);
 }
 
 /** A Task takes the Event's day; a Sub-task keeps its own and follows the Event through its Placement. */
@@ -273,12 +287,13 @@ function undateTask(state: State, id: string, now: Now): Changes {
 
 /**
  * Whether the Task can be dated to the day: it exists, is not a Sub-task (a Sub-task follows its parent's day),
- * and the change would do something: another day, or the same day but with a Placement to clear.
+ * the change would do something (another day, or the same day but with a Placement to clear), and the day is within
+ * the Task's drag limit (an Occurrence never goes onto or past its next Occurrence).
  * A drop on a day chip or on Anytime asks this before offering the target.
  */
 export function canDateTask(state: State, id: string, date: DateStr): boolean {
   const task = liveTask(state, id);
-  if (!task || task.parent_id) return false;
+  if (!task || task.parent_id || !withinDragLimit(state, task, date)) return false;
   return task.date !== date || task.event_id !== null || placedOpenSubtasks(state, id).length > 0;
 }
 
