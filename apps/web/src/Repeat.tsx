@@ -6,7 +6,7 @@ import { useState } from 'react';
 type Kind = 'days' | 'weekdays' | 'month';
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-export function RepeatPicker({ onApply }: { onApply: (rule: RecurrenceRule) => void }) {
+export function RepeatPicker({ onApply, applyLabel = 'Start repeating' }: { onApply: (rule: RecurrenceRule) => void; applyLabel?: string }) {
   const [kind, setKind] = useState<Kind>('days');
   const [days, setDays] = useState('1');
   const [picked, setPicked] = useState<number[]>([]);
@@ -81,27 +81,57 @@ export function RepeatPicker({ onApply }: { onApply: (rule: RecurrenceRule) => v
         </p>
       )}
       <button type="button" className="primary" onClick={apply}>
-        Start repeating
+        {applyLabel}
       </button>
     </fieldset>
   );
 }
 
 /**
- * The "Repeat…" part of a tap menu. An item that already repeats says so; changing or stopping its schedule
- * ("Change schedule", "Stop repeating", spec A5) comes with editing Occurrences, not here.
+ * The "Repeat…" part of a tap menu. An item that does not repeat gets "Repeat…". One that does says so, and while the
+ * core allows it ("Change schedule" and "Stop repeating", spec A5) offers those two: both always reach this and the
+ * following Occurrences, so neither asks which.
  */
 export function RepeatSection({
   recurrence,
   canRepeat,
   onRepeat,
+  canEditSchedule = false,
+  onChangeSchedule,
+  onStop,
 }: {
   recurrence: string | null;
   canRepeat: boolean;
   onRepeat: (rule: RecurrenceRule) => void;
+  /** The core says this Occurrence's schedule can be changed or stopped. */
+  canEditSchedule?: boolean;
+  onChangeSchedule?: (rule: RecurrenceRule) => void;
+  onStop?: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  if (recurrence !== null) return <p className="mute">↻ Repeats {recurrence}</p>;
+  if (recurrence !== null) {
+    return (
+      <>
+        <p className="mute">↻ Repeats {recurrence}</p>
+        {canEditSchedule && onChangeSchedule && onStop && (
+          <div className="repeat-actions">
+            {open ? (
+              <RepeatPicker applyLabel="Apply new schedule" onApply={onChangeSchedule} />
+            ) : (
+              <>
+                <button type="button" className="repeat-open" onClick={() => setOpen(true)}>
+                  Change schedule
+                </button>
+                <button type="button" className="repeat-open" onClick={onStop}>
+                  Stop repeating
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </>
+    );
+  }
   if (!canRepeat) return null;
   return open ? (
     <RepeatPicker onApply={onRepeat} />
