@@ -4,6 +4,7 @@ import { splitSeriesId } from './ids.ts';
 import type { Changes, Command, DateStr, EventRow, Now, SeriesRow, SeriesTemplate, State, TaskRow, Update } from './types.ts';
 import { noChanges } from './types.ts';
 import { isDone } from './commands.ts';
+import { checkEventTimes, normaliseTime } from './event-input.ts';
 import { parseTemplate } from './series.ts';
 
 /**
@@ -105,6 +106,31 @@ export function editFollowing(state: State, cmd: FollowingCommand, now: Now): Ch
       if (!title || title === occ.row.title) return noChanges();
       const updates = laterTasks(state, l, occ.row.id).filter((t) => t.title !== title).map((t) => updateRow('tasks', t.id, { title }, now));
       return mergeChanges({ inserts: [], updates, deletes: [] }, patchTemplates(state, l, (t) => ({ ...t, title }), now));
+    }
+    case 'renameEvent': {
+      const title = cmd.title.trim();
+      if (occ.kind !== 'event' || occ.row.id !== cmd.id) return undefined;
+      if (!title || title === occ.row.title) return noChanges();
+      const updates = laterEvents(state, l).filter((e) => e.title !== title).map((e) => updateRow('events', e.id, { title }, now));
+      return mergeChanges({ inserts: [], updates, deletes: [] }, patchTemplates(state, l, (t) => ({ ...t, title }), now));
+    }
+    case 'setEventTimes': {
+      if (occ.kind !== 'event' || occ.row.id !== cmd.id || checkEventTimes(cmd.start, cmd.end)) return undefined;
+      // only the time that was edited is overwritten: a hand-moved other time on a later Event survives
+      const edit: { start_time?: string; end_time?: string } = {};
+      if (normaliseTime(cmd.start) !== occ.row.start_time) edit.start_time = normaliseTime(cmd.start)!;
+      if (normaliseTime(cmd.end) !== occ.row.end_time) edit.end_time = normaliseTime(cmd.end)!;
+      if (!edit.start_time && !edit.end_time) return noChanges();
+      const updates = laterEvents(state, l)
+        .map((e) => ({ e, set: Object.fromEntries(Object.entries(edit).filter(([k, v]) => e[k as keyof typeof edit] !== v)) }))
+        .filter(({ set }) => Object.keys(set).length > 0)
+        .map(({ e, set }) => updateRow('events', e.id, set, now));
+      const patch = (t: SeriesTemplate): SeriesTemplate => ({
+        ...t,
+        ...(edit.start_time ? { start: edit.start_time } : {}),
+        ...(edit.end_time ? { end: edit.end_time } : {}),
+      });
+      return mergeChanges({ inserts: [], updates, deletes: [] }, patchTemplates(state, l, patch, now));
     }
     default:
       return undefined;
