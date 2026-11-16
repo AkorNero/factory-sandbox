@@ -1,0 +1,411 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Answers wayfinder ticket "What should Today + Upcoming look and feel like?"
+  Three structurally different variants of the Today + Upcoming screen, switchable via ?variant=A|B|C
+  and the floating bar (← / → keys too). Open the file in a browser; no build, no persistence.
+  A: Timeline   — hour grid with Event blocks, unplaced Tasks in an "Anytime" tray, Upcoming as a side column
+  B: Checklist  — one list of Tasks, Events are section headers, Upcoming in a slide-out drawer
+  C: Now / Next — focus card for the current Event, rest of day compressed, Upcoming as a day strip on top
+  The dev bar also fakes the clock (+1h, ⏭ midnight to see Carry-over and Skipped) and toggles a phone-width frame.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE · Today + Upcoming</title>
+<style>
+  :root{--bg:#f6f5f2;--card:#fff;--ink:#1d1d1f;--mute:#6b6b70;--line:#e3e1dc;--accent:#2f6fde;--accent-soft:#e6eefc;--warn:#b5560d;--warn-soft:#fdf0e4;--ok:#2f8a4c;--ghost:#9a9aa0}
+  @media (prefers-color-scheme:dark){:root{--bg:#161618;--card:#202023;--ink:#ececee;--mute:#9a9aa2;--line:#33333a;--accent:#7aa5ff;--accent-soft:#22304d;--warn:#f0a35c;--warn-soft:#3a2a1b;--ok:#6fcf8f;--ghost:#6e6e76}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding-bottom:90px}
+  button{font:inherit;color:inherit;cursor:pointer}
+  #frame{margin:0 auto;max-width:1180px;padding:16px}
+  body.phone #frame{max-width:390px;border-left:1px dashed var(--line);border-right:1px dashed var(--line);min-height:100vh}
+  h1,h2,h3{margin:0}
+  .mute{color:var(--mute)} .small{font-size:12.5px}
+  .badge{display:inline-block;font-size:11px;padding:1px 6px;border-radius:9px;background:var(--line);color:var(--mute);margin-left:6px;vertical-align:1px;white-space:nowrap}
+  .badge.carry{background:var(--warn-soft);color:var(--warn)}
+  .badge.recur{background:var(--accent-soft);color:var(--accent)}
+  .item{display:flex;gap:8px;align-items:flex-start;padding:4px 0}
+  .item .tick{flex:none;width:18px;height:18px;border:1.5px solid var(--mute);border-radius:5px;background:none;padding:0;margin-top:1px;display:grid;place-items:center;font-size:12px;line-height:1}
+  .item.done .tick{background:var(--ok);border-color:var(--ok);color:#fff}
+  .item.done .label{text-decoration:line-through;color:var(--mute)}
+  .item.skipped .label{text-decoration:line-through;color:var(--ghost)}
+  .item.ghost{color:var(--ghost);font-style:italic}
+  .item.parent .tick{border-style:dashed;cursor:default}
+  .ctx{font-size:11.5px;color:var(--mute)}
+  .banner{background:var(--warn-soft);color:var(--warn);border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:13.5px;display:flex;justify-content:space-between;gap:8px}
+  .banner button{background:none;border:0;color:inherit}
+  .someday summary{cursor:pointer;color:var(--mute);font-size:13px;padding:6px 0}
+  input[type=date]{font:inherit;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:2px 6px}
+
+  /* ---------- Variant A: Timeline ---------- */
+  .a-wrap{display:grid;grid-template-columns:1fr 300px;gap:20px}
+  body.phone .a-wrap{grid-template-columns:1fr}
+  @media (max-width:760px){.a-wrap{grid-template-columns:1fr}}
+  .a-head{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+  .a-tray{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:14px}
+  .a-tray h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin-bottom:4px}
+  .a-tl{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px}
+  .a-hour{position:absolute;left:0;right:0;border-top:1px solid var(--line);font-size:11px;color:var(--mute);padding-left:8px}
+  .a-ev{position:absolute;background:var(--accent-soft);border-left:3px solid var(--accent);border-radius:8px;padding:4px 8px;overflow:auto;font-size:13px}
+  .a-ev.past{opacity:.6}
+  .a-ev .t{font-weight:600}
+  .a-ev .item{padding:1px 0}
+  .a-now{position:absolute;left:44px;right:0;border-top:2px solid #e0453a;z-index:3}
+  .a-now::before{content:"";position:absolute;left:-5px;top:-5px;width:8px;height:8px;border-radius:50%;background:#e0453a}
+  .a-up{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;align-self:start;position:sticky;top:12px}
+  .a-up h2{font-size:15px;margin-bottom:8px}
+  .a-day{border-top:1px solid var(--line);padding:8px 0}
+  .a-day:first-of-type{border-top:0}
+  .a-day .d{font-size:12px;font-weight:600;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
+  .a-up .row{font-size:13.5px;padding:2px 0;display:flex;gap:6px}
+  .a-up .row .tm{color:var(--mute);min-width:42px;font-variant-numeric:tabular-nums}
+  .a-up .row.ghost{color:var(--ghost);font-style:italic}
+
+  /* ---------- Variant B: Checklist ---------- */
+  .b-wrap{max-width:620px;margin:0 auto}
+  .b-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+  .b-top h1{font-size:28px}
+  .b-upbtn{border:1px solid var(--line);background:var(--card);border-radius:20px;padding:6px 14px}
+  .b-sec{margin-bottom:16px}
+  .b-sec>.h{display:flex;gap:10px;align-items:baseline;border-bottom:1px solid var(--line);padding:6px 0;margin-bottom:4px}
+  .b-sec>.h .tm{font-variant-numeric:tabular-nums;font-weight:600;min-width:96px}
+  .b-sec>.h .ti{font-weight:600}
+  .b-sec.now>.h{border-bottom:2px solid var(--accent)}
+  .b-sec.now>.h .tm{color:var(--accent)}
+  .b-sec.past{opacity:.6}
+  .b-sec .empty{font-size:13px;color:var(--ghost);padding:2px 0}
+  .b-sec.carry>.h .ti{color:var(--warn)}
+  .b-subs{margin-left:26px}
+  .b-drawer{position:fixed;top:0;right:0;bottom:0;width:min(340px,88vw);background:var(--card);border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.12);padding:16px;overflow:auto;transform:translateX(100%);transition:transform .2s;z-index:20}
+  .b-drawer.open{transform:none}
+  .b-drawer .d{margin-top:12px;font-weight:600}
+  .b-drawer .row{font-size:14px;padding:3px 0 3px 10px;display:flex;gap:8px}
+  .b-drawer .row .tm{color:var(--mute);min-width:42px}
+  .b-drawer .row.ghost{color:var(--ghost);font-style:italic}
+
+  /* ---------- Variant C: Now / Next ---------- */
+  .c-strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px}
+  .c-chip{flex:none;min-width:66px;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:6px 8px;text-align:center}
+  .c-chip.sel{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  .c-chip .n{font-size:20px;font-weight:700;line-height:1.1}
+  .c-chip .w{font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  .c-chip .dots{font-size:10px;letter-spacing:1px;min-height:12px}
+  .c-main{max-width:640px;margin:0 auto}
+  .c-now{background:var(--accent);color:#fff;border-radius:18px;padding:16px 18px;margin-bottom:12px}
+  .c-now .lbl{font-size:12px;text-transform:uppercase;letter-spacing:.08em;opacity:.8}
+  .c-now h2{font-size:24px;margin:2px 0}
+  .c-now .bar{height:5px;background:rgba(255,255,255,.3);border-radius:3px;margin:8px 0 10px}
+  .c-now .bar i{display:block;height:100%;background:#fff;border-radius:3px}
+  .c-now .item .tick{border-color:#fff}
+  .c-now .ctx{color:rgba(255,255,255,.75)}
+  .c-now .item.done .label{color:rgba(255,255,255,.7)}
+  .c-next{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px}
+  .c-next .lbl{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute)}
+  .c-later{display:flex;flex-direction:column;gap:2px;margin-bottom:14px}
+  .c-later .r{display:flex;gap:10px;padding:6px 4px;border-bottom:1px solid var(--line);font-size:14px}
+  .c-later .r .tm{font-variant-numeric:tabular-nums;color:var(--mute);min-width:48px}
+  .c-pills{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 14px}
+  .c-pill{display:flex;gap:6px;align-items:center;border:1px solid var(--line);background:var(--card);border-radius:20px;padding:5px 12px 5px 6px;font-size:14px}
+  .c-pill.done{opacity:.55;text-decoration:line-through}
+  .c-pill .tick{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--mute);background:none;padding:0;font-size:11px}
+  .c-pill.done .tick{background:var(--ok);border-color:var(--ok);color:#fff}
+  .c-pill.carry{border-color:var(--warn)}
+  .c-sec{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:10px 0 4px}
+  .c-other{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+
+  /* ---------- Switcher / dev bar (not part of the design) ---------- */
+  #pbar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:50;display:flex;gap:4px;align-items:center;background:#111;color:#fff;border-radius:30px;padding:6px 8px;box-shadow:0 6px 24px rgba(0,0,0,.35);font:13px system-ui;white-space:nowrap;max-width:96vw;overflow-x:auto}
+  #pbar button{background:#2a2a2e;border:0;color:#fff;border-radius:20px;padding:5px 10px}
+  #pbar button:hover{background:#3a3a40}
+  #pbar .lbl{padding:0 8px;font-weight:600;min-width:150px;text-align:center}
+  #pbar .sep{width:1px;height:18px;background:#444;margin:0 4px}
+  #pstate{position:fixed;right:12px;bottom:70px;width:min(460px,92vw);max-height:55vh;overflow:auto;background:#111;color:#cfe;font:11.5px/1.35 ui-monospace,monospace;padding:10px;border-radius:10px;z-index:49;display:none;white-space:pre}
+  #pstate.open{display:block}
+</style>
+</head>
+<body>
+<div id="frame"><div id="app"></div></div>
+<pre id="pstate"></pre>
+<div id="pbar">
+  <button data-act="prev" title="Previous variant (←)">←</button>
+  <span class="lbl" id="vlabel"></span>
+  <button data-act="next" title="Next variant (→)">→</button>
+  <span class="sep"></span>
+  <span id="clock" style="padding:0 6px"></span>
+  <button data-act="hour" title="Advance clock 1 hour">+1h</button>
+  <button data-act="midnight" title="Jump to next day: runs Carry-over and Skipped">⏭ midnight</button>
+  <span class="sep"></span>
+  <button data-act="phone" title="Toggle phone-width frame">📱</button>
+  <button data-act="state" title="Show state">{ }</button>
+  <button data-act="reset" title="Reset sample data">↺</button>
+</div>
+
+<script>
+/* ===================== sample data + model (shared, in memory only) ===================== */
+const BASE = new Date(2026, 10, 16); // Mon 16 Nov 2026 = day 0
+const dateOf = d => new Date(BASE.getFullYear(), BASE.getMonth(), BASE.getDate() + d);
+const dow = d => dateOf(d).getDay();
+const fmtDay = (d, opts = { weekday: 'short', day: 'numeric', month: 'short' }) => dateOf(d).toLocaleDateString('en-GB', opts);
+const hm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+const ruleText = r => r.daily ? 'daily' : r.every ? `every ${r.every} days` : r.weekdays ? (r.weekdays.length === 5 ? 'weekdays' : r.weekdays.map(w => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][w]).join('/')) : '';
+const matches = (r, d) => r.daily ? true : r.every ? d >= r.from && (d - r.from) % r.every === 0 : r.weekdays ? r.weekdays.includes(dow(d)) : false;
+
+const RECUR_TASKS = [
+  { rid: 'vit', title: 'Take vitamins', rule: { daily: true } },
+  { rid: 'plants', title: 'Water plants', rule: { every: 3, from: -2 } },
+  { rid: 'review', title: 'Weekly review', rule: { weekdays: [5] } },
+];
+const RECUR_EVENTS = [
+  { rid: 'run', title: 'Morning run', start: 420, end: 450, rule: { weekdays: [1, 2, 3, 4, 5] } },
+  { rid: 'standup', title: 'Standup', start: 570, end: 585, rule: { weekdays: [1, 2, 3, 4, 5] } },
+];
+
+let S, nid;
+function reset() {
+  nid = 1;
+  S = { day: 0, time: 615, events: [], tasks: [], banner: null, maxEvDay: -1, upOpen: false, selDay: 0, extraDay: null };
+  const ev = (date, title, start, end, extra = {}) => { const e = { id: 'e' + nid++, title, date, start, end, ...extra }; S.events.push(e); return e; };
+  const tk = (title, date, extra = {}) => { const t = { id: 't' + nid++, title, date, eventId: null, done: null, carried: 0, parentId: null, recurId: null, skipped: false, ...extra }; S.tasks.push(t); return t; };
+
+  const deep = ev(0, 'Deep work', 540, 660);
+  ev(0, 'Lunch with Sam', 750, 810);
+  ev(0, 'Dentist', 960, 1005);
+  const errands = ev(0, 'Errands', 1020, 1080);
+  const evening = ev(0, 'Evening focus', 1200, 1260);
+  ev(1, 'Yoga', 1080, 1140); ev(2, 'Team offsite', 600, 960); ev(3, 'Haircut', 720, 750);
+  ev(5, "Dinner at Priya's", 1170, 1290); ev(9, 'Flight to Lisbon', 480, 660);
+  materializeEvents(0, 13);
+
+  const run = S.events.find(e => e.recurId === 'run' && e.date === 0);
+  const rep = tk('Write report', 0);
+  tk('Collect figures', 0, { parentId: rep.id, carried: 1 });
+  tk('Draft intro', 0, { parentId: rep.id, eventId: deep.id, done: 580 });
+  tk('Outline section 2', 0, { parentId: rep.id, eventId: deep.id });
+  tk('Proofread & send', 0, { parentId: rep.id, eventId: evening.id });
+  tk("Review Alex's PR", 0, { eventId: deep.id });
+  tk('Buy stamps', 0, { eventId: errands.id });
+  tk('Return library books', 0, { eventId: errands.id });
+  tk('Pay electricity bill', 0, { carried: 1 });
+  tk('Reply to landlord', 0);
+  tk('Stretch 10 min', 0, { eventId: run.id, done: 445 });
+  tk('Take vitamins', 0, { recurId: 'vit', done: 470 });
+  tk('Water plants', 0, { recurId: 'plants', carried: 2 }); // occurrence from day -2, still unfinished
+  tk('Submit expense claim', 1); tk('Renew passport form', 3); tk('Call grandma', 6); tk('Pack for Lisbon', 8);
+  ['Learn Spanish basics', 'Fix bike light', 'Sort photos', 'Research new laptop'].forEach(t => tk(t, null));
+}
+function materializeEvents(from, to) {
+  for (let d = Math.max(from, S.maxEvDay + 1); d <= to; d++)
+    RECUR_EVENTS.forEach(r => matches(r.rule, d) && S.events.push({ id: 'e' + nid++, title: r.title, date: d, start: r.start, end: r.end, recurId: r.rid }));
+  S.maxEvDay = Math.max(S.maxEvDay, to);
+}
+const subsOf = id => S.tasks.filter(t => t.parentId === id);
+const isOpen = t => !t.done && !t.skipped;
+const eventAt = (d, m) => S.events.filter(e => e.date === d && e.start <= m && m < e.end).sort((a, b) => b.start - a.start)[0];
+const evById = id => S.events.find(e => e.id === id);
+
+function tick(id) {
+  const t = S.tasks.find(x => x.id === id);
+  if (!t || t.skipped || subsOf(t.id).length) return; // parents complete via their Sub-tasks
+  t.done = t.done ? null : S.time;
+  if (t.parentId) { const p = S.tasks.find(x => x.id === t.parentId); p.done = subsOf(p.id).every(s => s.done) ? S.time : null; }
+}
+function midnight() {
+  const old = S.day; S.day++; S.time = 480; S.selDay = S.day;
+  const carried = [], skipped = [];
+  S.tasks.filter(t => t.date === old && !t.parentId && isOpen(t)).forEach(t => {
+    t.date = S.day; t.carried++; t.eventId = null;
+    subsOf(t.id).filter(isOpen).forEach(s => { s.date = S.day; s.eventId = null; s.carried++; });
+    carried.push(t.title);
+  });
+  RECUR_TASKS.forEach(r => {
+    if (!matches(r.rule, S.day)) return;
+    S.tasks.filter(t => t.recurId === r.rid && isOpen(t)).forEach(t => { t.skipped = true; subsOf(t.id).filter(isOpen).forEach(s => s.skipped = true); skipped.push(t.title); const i = carried.indexOf(t.title); if (i >= 0) carried.splice(i, 1); });
+    S.tasks.push({ id: 't' + nid++, title: r.title, date: S.day, eventId: null, done: null, carried: 0, parentId: null, recurId: r.rid, skipped: false });
+  });
+  materializeEvents(S.day, S.day + 13);
+  S.banner = { carried, skipped };
+}
+
+/* day queries */
+const eventsOn = d => S.events.filter(e => e.date === d).sort((a, b) => a.start - b.start);
+const placedIn = eid => S.tasks.filter(t => t.eventId === eid && !t.skipped);
+const topTasksOn = d => S.tasks.filter(t => t.date === d && !t.parentId && !t.skipped);
+const unplacedOn = d => topTasksOn(d).filter(t => !t.eventId && !(subsOf(t.id).length && subsOf(t.id).every(s => s.eventId)));
+const ghostsOn = d => d > S.day ? RECUR_TASKS.filter(r => matches(r.rule, d)) : [];
+const recurOf = t => (RECUR_TASKS.find(r => r.rid === t.recurId) || RECUR_EVENTS.find(r => r.rid === t.recurId));
+const someday = () => S.tasks.filter(t => t.date === null);
+
+/* shared bits (small fragments only; each variant owns its layout) */
+function badges(t) {
+  let b = '';
+  if (t.recurId) b += `<span class="badge recur" title="Recurrence: ${ruleText(recurOf(t).rule)}">↻ ${ruleText(recurOf(t).rule)}</span>`;
+  if (t.carried && isOpen(t)) b += `<span class="badge carry" title="Carry-over">↪ carried ${t.carried}d</span>`;
+  if (t.skipped) b += `<span class="badge">skipped</span>`;
+  return b;
+}
+function doneNote(t) {
+  if (!t.done || subsOf(t.id).length) return '';
+  const placed = t.eventId && evById(t.eventId), covers = placed && placed.start <= t.done && t.done < placed.end;
+  const e = covers ? placed : eventAt(t.date, t.done); // overlap: prefer the Event it was placed in
+  return `<div class="ctx">done ${hm(t.done)}${e ? ' · in ' + esc(e.title) : ''}</div>`;
+}
+function item(t, { ctx = '', showDone = true } = {}) {
+  const subs = subsOf(t.id);
+  const cls = ['item', t.done && 'done', t.skipped && 'skipped', subs.length && 'parent'].filter(Boolean).join(' ');
+  const prog = subs.length ? ` <span class="badge">${subs.filter(s => s.done).length}/${subs.length}</span>` : '';
+  return `<div class="${cls}"><button class="tick" data-tick="${t.id}">${t.done ? '✓' : ''}</button><div class="label">${esc(t.title)}${prog}${badges(t)}${ctx ? `<div class="ctx">${ctx}</div>` : ''}${showDone ? doneNote(t) : ''}</div></div>`;
+}
+const parentCtx = t => t.parentId ? '↳ ' + esc(S.tasks.find(p => p.id === t.parentId).title) : '';
+function subWhere(s) {
+  if (s.eventId) { const e = evById(s.eventId); return `in ${esc(e.title)} ${hm(e.start)}`; }
+  return 'unplaced';
+}
+function banner() {
+  if (!S.banner) return '';
+  const { carried, skipped } = S.banner;
+  return `<div class="banner"><span>Overnight: ${carried.length ? `carried over <b>${carried.map(esc).join(', ')}</b> (Placements cleared)` : 'nothing carried over'}${skipped.length ? ` · skipped <b>${skipped.map(esc).join(', ')}</b>` : ''}</span><button data-act="dismiss">✕</button></div>`;
+}
+function somedayBlock() {
+  const s = someday();
+  return `<details class="someday"><summary>Someday (${s.length})</summary>${s.map(t => item(t)).join('')}</details>`;
+}
+function upcomingDays() { const a = []; for (let d = S.day + 1; d <= S.day + 7; d++) a.push(d); return a; }
+function dayRows(d, cls) {
+  const rows = [];
+  eventsOn(d).forEach(e => rows.push({ k: e.start, h: `<div class="${cls}"><span class="tm">${hm(e.start)}</span><span>${esc(e.title)}${e.recurId ? ' ↻' : ''}${placedIn(e.id).length ? ` <span class="mute small">· ${placedIn(e.id).length} placed</span>` : ''}</span></div>` }));
+  topTasksOn(d).forEach(t => rows.push({ k: 2000, h: `<div class="${cls}"><span class="tm">○</span><span>${esc(t.title)}${badges(t)}</span></div>` }));
+  ghostsOn(d).forEach(r => rows.push({ k: 2001, h: `<div class="${cls} ghost"><span class="tm">○</span><span>↻ ${esc(r.title)}</span></div>` }));
+  return rows.sort((a, b) => a.k - b.k).map(r => r.h).join('') || `<div class="mute small" style="padding-left:10px">nothing</div>`;
+}
+const openDayInput = () => `<div class="small mute" style="margin-top:10px">Open another day: <input type="date" data-act="openday" min="${dateOf(S.day).toISOString().slice(0, 10)}"></div>${S.extraDay !== null ? `<div style="margin-top:6px"><b>${fmtDay(S.extraDay)}</b>${dayRows(S.extraDay, 'row')}</div>` : ''}`;
+
+/* ===================== Variant A: Timeline ===================== */
+function VariantA() {
+  const d = S.day, PX = 1.1, H0 = 6 * 60, H1 = 23 * 60;
+  const y = m => (m - H0) * PX;
+  const evs = eventsOn(d);
+  // overlap columns
+  const cols = []; evs.forEach(e => { let c = cols.findIndex(end => end <= e.start); if (c < 0) { c = cols.length; cols.push(0); } cols[c] = e.end; e._c = c; });
+  evs.forEach(e => e._n = Math.max(...evs.filter(o => o.start < e.end && e.start < o.end).map(o => o._c)) + 1);
+  let tl = '';
+  for (let h = 6; h <= 23; h++) tl += `<div class="a-hour" style="top:${y(h * 60)}px">${String(h).padStart(2, '0')}</div>`;
+  evs.forEach(e => {
+    const w = `calc((100% - 52px) / ${e._n})`;
+    tl += `<div class="a-ev ${e.end <= S.time ? 'past' : ''}" style="top:${y(e.start)}px;height:${Math.max(26, (e.end - e.start) * PX - 2)}px;left:calc(48px + ${w} * ${e._c});width:calc(${w} - 4px)">
+      <div class="t">${esc(e.title)} <span class="mute small">${hm(e.start)}–${hm(e.end)}${e.recurId ? ' ↻' : ''}</span></div>
+      ${placedIn(e.id).map(t => item(t, { ctx: parentCtx(t), showDone: false })).join('')}</div>`;
+  });
+  tl += `<div class="a-now" style="top:${y(S.time)}px"></div>`;
+  const tray = unplacedOn(d);
+  return `<div class="a-wrap"><div>
+    <div class="a-head"><h1>Today</h1><span class="mute">${fmtDay(d, { weekday: 'long', day: 'numeric', month: 'long' })}</span></div>
+    ${banner()}
+    <div class="a-tray"><h3>Anytime today</h3>${tray.map(t => item(t) + (subsOf(t.id).length ? `<div style="margin-left:26px">${subsOf(t.id).map(s => item(s, { ctx: subWhere(s) })).join('')}</div>` : '')).join('') || '<div class="mute small">all placed</div>'}</div>
+    <div class="a-tl" style="height:${y(H1) + 10}px">${tl}</div>
+    ${somedayBlock()}
+  </div>
+  <aside class="a-up"><h2>Upcoming</h2>${upcomingDays().map(u => `<div class="a-day"><div class="d">${fmtDay(u)}</div>${dayRows(u, 'row')}</div>`).join('')}${openDayInput()}</aside></div>`;
+}
+
+/* ===================== Variant B: Checklist ===================== */
+function VariantB() {
+  const d = S.day;
+  const carry = unplacedOn(d).filter(t => t.carried && isOpen(t));
+  const anytime = unplacedOn(d).filter(t => !(t.carried && isOpen(t)));
+  const withSubs = t => item(t) + (subsOf(t.id).length ? `<div class="b-subs">${subsOf(t.id).map(s => item(s, { ctx: subWhere(s) })).join('')}</div>` : '');
+  let html = `<div class="b-wrap"><div class="b-top"><div><h1>Today</h1><div class="mute">${fmtDay(d, { weekday: 'long', day: 'numeric', month: 'long' })} · ${S.tasks.filter(t => t.date === d && !subsOf(t.id).length && t.done).length} done, ${S.tasks.filter(t => t.date === d && !subsOf(t.id).length && isOpen(t)).length} to go</div></div>
+    <button class="b-upbtn" data-act="up">Upcoming ›</button></div>${banner()}`;
+  if (carry.length) html += `<div class="b-sec carry"><div class="h"><span class="tm">↪</span><span class="ti">Carried over</span></div>${carry.map(withSubs).join('')}</div>`;
+  html += `<div class="b-sec"><div class="h"><span class="tm">Anytime</span><span class="ti mute small">not placed in an Event</span></div>${anytime.map(withSubs).join('') || '<div class="empty">—</div>'}</div>`;
+  eventsOn(d).forEach(e => {
+    const now = e.start <= S.time && S.time < e.end, past = e.end <= S.time;
+    const its = placedIn(e.id);
+    html += `<div class="b-sec ${now ? 'now' : ''} ${past ? 'past' : ''}"><div class="h"><span class="tm">${hm(e.start)}–${hm(e.end)}</span><span class="ti">${esc(e.title)}</span>${e.recurId ? `<span class="badge recur">↻ ${ruleText(recurOf(e).rule)}</span>` : ''}${now ? '<span class="badge recur">now</span>' : ''}</div>
+      ${its.map(t => item(t, { ctx: parentCtx(t) })).join('') || '<div class="empty">no Tasks placed</div>'}</div>`;
+  });
+  html += somedayBlock() + `</div>
+  <div class="b-drawer ${S.upOpen ? 'open' : ''}"><div style="display:flex;justify-content:space-between"><h2>Upcoming</h2><button class="b-upbtn" data-act="up">✕</button></div>
+  ${upcomingDays().map(u => `<div class="d">${fmtDay(u, { weekday: 'long', day: 'numeric', month: 'short' })}</div>${dayRows(u, 'row')}`).join('')}${openDayInput()}</div>`;
+  return html;
+}
+
+/* ===================== Variant C: Now / Next ===================== */
+function VariantC() {
+  const d = S.day;
+  const days = [d, ...upcomingDays()];
+  const strip = `<div class="c-strip">${days.map(x => {
+    const n = eventsOn(x).length, t = topTasksOn(x).filter(isOpen).length + ghostsOn(x).length;
+    return `<button class="c-chip ${x === S.selDay ? 'sel' : ''}" data-sel="${x}"><div class="w">${x === d ? 'Today' : fmtDay(x, { weekday: 'short' })}</div><div class="n">${dateOf(x).getDate()}</div><div class="dots">${'▪'.repeat(Math.min(n, 4))}${'•'.repeat(Math.min(t, 4))}</div></button>`;
+  }).join('')}<span style="align-self:center" class="small mute">▪ Event • Task</span></div>`;
+  if (S.selDay !== d) {
+    return `<div class="c-main">${strip}<div class="c-other"><h2 style="margin-bottom:6px">${fmtDay(S.selDay, { weekday: 'long', day: 'numeric', month: 'long' })}</h2>${dayRows(S.selDay, 'r').replace(/class="r"/g, 'class="r" style="display:flex;gap:10px;padding:4px 0"').replace(/class="r ghost"/g, 'class="r ghost" style="display:flex;gap:10px;padding:4px 0;color:var(--ghost);font-style:italic"')}${openDayInput()}</div></div>`;
+  }
+  const evs = eventsOn(d);
+  const now = evs.filter(e => e.start <= S.time && S.time < e.end).sort((a, b) => b.start - a.start)[0];
+  const next = evs.find(e => e.start > S.time && e !== now);
+  const later = evs.filter(e => e.start > S.time && e !== next && e !== now);
+  const doneEv = evs.filter(e => e.end <= S.time && e !== now);
+  let html = `<div class="c-main">${strip}${banner()}`;
+  if (now) {
+    const pct = Math.round(100 * (S.time - now.start) / (now.end - now.start));
+    html += `<div class="c-now"><div class="lbl">Now · ${hm(now.start)}–${hm(now.end)} · ${now.end - S.time} min left</div><h2>${esc(now.title)}</h2><div class="bar"><i style="width:${pct}%"></i></div>${placedIn(now.id).map(t => item(t, { ctx: parentCtx(t), showDone: false })).join('') || '<div style="opacity:.8">Nothing placed — free time</div>'}</div>`;
+  } else html += `<div class="c-now" style="background:var(--card);color:var(--ink);border:1px solid var(--line)"><div class="lbl">Now</div><h2>Free</h2><div class="mute">No Event right now — pick something from Anytime.</div></div>`;
+  if (next) html += `<div class="c-next"><div class="lbl">Next · ${hm(next.start)} (in ${next.start - S.time} min)</div><h3 style="margin:2px 0 4px">${esc(next.title)}</h3>${placedIn(next.id).map(t => item(t, { ctx: parentCtx(t) })).join('')}</div>`;
+  const anytime = unplacedOn(d).flatMap(t => subsOf(t.id).length ? subsOf(t.id).filter(s => !s.eventId).map(s => ({ t: s, ctx: S.tasks.find(p => p.id === s.parentId).title })) : [{ t }]);
+  html += `<div class="c-sec">Anytime today</div><div class="c-pills">${anytime.map(({ t, ctx }) => `<span class="c-pill ${t.done ? 'done' : ''} ${t.carried && isOpen(t) ? 'carry' : ''}"><button class="tick" data-tick="${t.id}">${t.done ? '✓' : ''}</button>${esc(t.title)}${ctx ? ` <span class="ctx">· ${esc(ctx)}</span>` : ''}${t.recurId ? ' <span class="badge recur">↻</span>' : ''}${t.carried && isOpen(t) ? ` <span class="badge carry">↪${t.carried}d</span>` : ''}</span>`).join('')}</div>`;
+  if (later.length) html += `<div class="c-sec">Later today</div><div class="c-later">${later.map(e => `<div class="r"><span class="tm">${hm(e.start)}</span><span>${esc(e.title)}${e.recurId ? ' ↻' : ''} ${placedIn(e.id).length ? `<span class="mute small">· ${placedIn(e.id).map(t => esc(t.title)).join(', ')}</span>` : ''}</span></div>`).join('')}</div>`;
+  const doneTasks = S.tasks.filter(t => t.date === d && t.done && !subsOf(t.id).length);
+  html += `<details class="someday"><summary>Earlier today: ${doneEv.length} Events, ${doneTasks.length} done</summary>${doneEv.map(e => `<div class="small mute">${hm(e.start)} ${esc(e.title)}</div>`).join('')}${doneTasks.map(t => item(t, { ctx: parentCtx(t) })).join('')}</details>${somedayBlock()}</div>`;
+  return html;
+}
+
+/* ===================== switcher + wiring ===================== */
+const VARIANTS = { A: ['Timeline', VariantA], B: ['Checklist', VariantB], C: ['Now / Next', VariantC] };
+const KEYS = Object.keys(VARIANTS);
+let cur = new URLSearchParams(location.search).get('variant');
+if (!KEYS.includes(cur)) cur = 'A';
+function setVariant(v) { cur = v; const u = new URL(location); u.searchParams.set('variant', v); history.replaceState(null, '', u); render(); }
+function render() {
+  document.getElementById('app').innerHTML = VARIANTS[cur][1]();
+  document.getElementById('vlabel').textContent = `${cur} (${VARIANTS[cur][0]})`;
+  document.getElementById('clock').textContent = `${fmtDay(S.day)} ${hm(S.time)}`;
+  const dump = { variant: cur, day: fmtDay(S.day), time: hm(S.time),
+    events: eventsOn(S.day).map(e => `${hm(e.start)}-${hm(e.end)} ${e.title}${e.recurId ? ' ↻' : ''} ← [${placedIn(e.id).map(t => t.title + (t.done ? ' ✓' : '')).join(', ')}]`),
+    tasks: S.tasks.filter(t => t.date === S.day || (t.skipped && t.date >= S.day - 1)).map(t => `${t.parentId ? '  ↳ ' : ''}${t.title}${t.done ? ' ✓' + hm(t.done) : ''}${t.skipped ? ' SKIPPED' : ''}${t.carried ? ' carried' + t.carried : ''}${t.eventId ? ' @' + evById(t.eventId).title : ''}`),
+    banner: S.banner };
+  document.getElementById('pstate').textContent = JSON.stringify(dump, null, 1);
+}
+document.addEventListener('click', e => {
+  const tk = e.target.closest('[data-tick]'); if (tk) { tick(tk.dataset.tick); return render(); }
+  const sel = e.target.closest('[data-sel]'); if (sel) { S.selDay = +sel.dataset.sel; return render(); }
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  const act = a.dataset.act, i = KEYS.indexOf(cur);
+  if (act === 'prev') setVariant(KEYS[(i - 1 + KEYS.length) % KEYS.length]);
+  else if (act === 'next') setVariant(KEYS[(i + 1) % KEYS.length]);
+  else if (act === 'hour') { S.time = Math.min(S.time + 60, 23 * 60 + 59); render(); }
+  else if (act === 'midnight') { midnight(); render(); }
+  else if (act === 'phone') document.body.classList.toggle('phone');
+  else if (act === 'state') document.getElementById('pstate').classList.toggle('open');
+  else if (act === 'reset') { reset(); render(); }
+  else if (act === 'dismiss') { S.banner = null; render(); }
+  else if (act === 'up') { S.upOpen = !S.upOpen; render(); }
+});
+document.addEventListener('change', e => {
+  if (e.target.dataset.act !== 'openday' || !e.target.value) return;
+  const [y, m, d] = e.target.value.split('-').map(Number);
+  S.extraDay = Math.round((new Date(y, m - 1, d) - BASE) / 864e5);
+  materializeEvents(S.day, S.extraDay); render();
+});
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input,textarea,[contenteditable]')) return;
+  if (e.key === 'ArrowLeft') document.querySelector('[data-act=prev]').click();
+  if (e.key === 'ArrowRight') document.querySelector('[data-act=next]').click();
+});
+reset(); render();
+</script>
+</body>
+</html>
