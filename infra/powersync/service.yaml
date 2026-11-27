@@ -1,0 +1,28 @@
+replication:
+  connections:
+    - type: postgresql
+      uri: !env PS_SOURCE_URI
+      sslmode: disable # private docker network
+
+storage:
+  type: postgresql
+  uri: !env PS_STORAGE_URI
+  sslmode: disable
+
+port: 8080
+
+sync_config:
+  path: sync-config.yaml
+
+client_auth:
+  # The Node API serves the public key over the compose network.
+  jwks_uri: http://api:8080/.well-known/jwks.json
+  audience: ['dayplanner'] # must equal the JWT `aud`
+
+telemetry:
+  disable_telemetry_sharing: true
+
+system:
+  logging:
+    level: info
+    format: text

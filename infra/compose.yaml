@@ -1,0 +1,89 @@
+name: dayplanner
+
+# One image for the api and the migrate job.
+x-api-build: &api-build
+  build:
+    context: ..
+    dockerfile: apps/api/Dockerfile
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    command: ["postgres", "-c", "wal_level=logical"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PG_SUPER_PASSWORD}
+      POSTGRES_DB: dayplanner
+      PS_STORAGE_PASSWORD: ${PS_STORAGE_PASSWORD}
+      PS_REPL_PASSWORD: ${PS_REPL_PASSWORD}
+      API_DB_PASSWORD: ${API_DB_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      # Roles and the publication, made once on an empty volume. The tables come from the migrate service below.
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dayplanner"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # No published ports: only the other services reach it.
+
+  powersync:
+    image: journeyapps/powersync-service:1.28.3
+    restart: unless-stopped
+    command: ["start", "-r", "unified"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      api: { condition: service_healthy }
+    volumes:
+      - ./powersync:/config:ro
+    environment:
+      POWERSYNC_CONFIG_PATH: /config/service.yaml
+      PS_SOURCE_URI: postgresql://powersync_role:${PS_REPL_PASSWORD}@postgres:5432/dayplanner
+      PS_STORAGE_URI: postgresql://powersync_storage_user:${PS_STORAGE_PASSWORD}@postgres:5432/powersync_storage
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/probes/liveness').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # No published ports: reached only as http://powersync:8080 from the api container.
+
+  # Brings the schema up to date on every `up`: a fresh volume gets all of it, an older one only what it lacks.
+  # It runs as the database owner (the api's own role cannot change tables) and exits; the api waits for it.
+  migrate:
+    <<: *api-build
+    restart: "no"
+    command: ["node", "apps/api/src/migrate.ts"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgresql://postgres:${PG_SUPER_PASSWORD}@postgres:5432/dayplanner
+
+  api:
+    <<: *api-build
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    environment:
+      DATABASE_URL: postgresql://api_user:${API_DB_PASSWORD}@postgres:5432/dayplanner
+      POWERSYNC_UPSTREAM: http://powersync:8080
+      PORT: "8080"
+      HOST: 0.0.0.0
+      JWT_KEY_FILE: /data/jwt-key.json
+      WEB_DIST: /app/web
+    volumes:
+      - api_data:/data
+    ports:
+      # `tailscale serve` on the host forwards https://dayplanner.<tailnet>.ts.net to this.
+      - "${API_PUBLISH:-127.0.0.1:8080}:8080"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pg_data:
+  api_data:

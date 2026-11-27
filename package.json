@@ -1,0 +1,16 @@
+{
+  "name": "day-planner",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "test": "npm run test:core && npm run test:api",
+    "test:core": "npm -w packages/core run test",
+    "test:api": "npm -w apps/api run test",
+    "test:e2e": "npm -w apps/web run e2e",
+    "test:e2e:sync": "npm -w apps/web run e2e:sync",
+    "build": "npm -w apps/web run build && npm -w apps/api run build",
+    "typecheck": "npm -w packages/core run typecheck && npm -w apps/api run typecheck && npm -w apps/web run typecheck"
+  }
+}
